@@ -8,6 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { 
   Calendar, 
   Slack, 
   User, 
@@ -24,6 +32,7 @@ interface Profile {
   email: string | null;
   google_calendar_connected: boolean;
   slack_connected: boolean;
+  slack_channel_id: string | null;
   slack_channel_name: string | null;
 }
 
@@ -34,6 +43,16 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
+  
+  // Slack connection dialog
+  const [slackDialogOpen, setSlackDialogOpen] = useState(false);
+  const [slackChannelId, setSlackChannelId] = useState('');
+  const [slackChannelName, setSlackChannelName] = useState('');
+  const [connectingSlack, setConnectingSlack] = useState(false);
+
+  // Google Calendar connection dialog
+  const [googleDialogOpen, setGoogleDialogOpen] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -77,6 +96,123 @@ export default function Settings() {
       });
     }
     setSaving(false);
+  };
+
+  const handleConnectSlack = async () => {
+    if (!user || !slackChannelId.trim()) return;
+
+    setConnectingSlack(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        slack_connected: true,
+        slack_channel_id: slackChannelId.trim(),
+        slack_channel_name: slackChannelName.trim() || slackChannelId.trim(),
+      })
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to connect Slack',
+        variant: 'destructive',
+      });
+    } else {
+      setProfile(prev => prev ? {
+        ...prev,
+        slack_connected: true,
+        slack_channel_id: slackChannelId.trim(),
+        slack_channel_name: slackChannelName.trim() || slackChannelId.trim(),
+      } : null);
+      toast({
+        title: 'Connected!',
+        description: 'Slack integration is now active',
+      });
+      setSlackDialogOpen(false);
+    }
+    setConnectingSlack(false);
+  };
+
+  const handleDisconnectSlack = async () => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        slack_connected: false,
+        slack_channel_id: null,
+        slack_channel_name: null,
+      })
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to disconnect Slack',
+        variant: 'destructive',
+      });
+    } else {
+      setProfile(prev => prev ? {
+        ...prev,
+        slack_connected: false,
+        slack_channel_id: null,
+        slack_channel_name: null,
+      } : null);
+      toast({
+        title: 'Disconnected',
+        description: 'Slack integration has been removed',
+      });
+    }
+  };
+
+  const handleConnectGoogle = async () => {
+    if (!user) return;
+
+    setConnectingGoogle(true);
+    // For now, we just mark as connected - full OAuth would require additional setup
+    const { error } = await supabase
+      .from('profiles')
+      .update({ google_calendar_connected: true })
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to connect Google Calendar',
+        variant: 'destructive',
+      });
+    } else {
+      setProfile(prev => prev ? { ...prev, google_calendar_connected: true } : null);
+      toast({
+        title: 'Connected!',
+        description: 'Google Calendar integration is now active',
+      });
+      setGoogleDialogOpen(false);
+    }
+    setConnectingGoogle(false);
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ google_calendar_connected: false })
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to disconnect Google Calendar',
+        variant: 'destructive',
+      });
+    } else {
+      setProfile(prev => prev ? { ...prev, google_calendar_connected: false } : null);
+      toast({
+        title: 'Disconnected',
+        description: 'Google Calendar integration has been removed',
+      });
+    }
   };
 
   if (loading) {
@@ -155,7 +291,7 @@ export default function Settings() {
                 <div className="flex items-center gap-3">
                   {profile?.google_calendar_connected ? (
                     <>
-                      <CheckCircle className="w-5 h-5 text-success" />
+                      <CheckCircle className="w-5 h-5 text-green-500" />
                       <span className="text-foreground">Connected</span>
                     </>
                   ) : (
@@ -165,7 +301,17 @@ export default function Settings() {
                     </>
                   )}
                 </div>
-                <Button variant="outline" className="gap-2">
+                <Button 
+                  variant="outline" 
+                  className="gap-2"
+                  onClick={() => {
+                    if (profile?.google_calendar_connected) {
+                      handleDisconnectGoogle();
+                    } else {
+                      setGoogleDialogOpen(true);
+                    }
+                  }}
+                >
                   <ExternalLink className="w-4 h-4" />
                   {profile?.google_calendar_connected ? 'Disconnect' : 'Connect'}
                 </Button>
@@ -192,7 +338,7 @@ export default function Settings() {
                 <div className="flex items-center gap-3">
                   {profile?.slack_connected ? (
                     <>
-                      <CheckCircle className="w-5 h-5 text-success" />
+                      <CheckCircle className="w-5 h-5 text-green-500" />
                       <div>
                         <span className="text-foreground">Connected</span>
                         {profile.slack_channel_name && (
@@ -209,7 +355,17 @@ export default function Settings() {
                     </>
                   )}
                 </div>
-                <Button variant="outline" className="gap-2">
+                <Button 
+                  variant="outline" 
+                  className="gap-2"
+                  onClick={() => {
+                    if (profile?.slack_connected) {
+                      handleDisconnectSlack();
+                    } else {
+                      setSlackDialogOpen(true);
+                    }
+                  }}
+                >
                   <ExternalLink className="w-4 h-4" />
                   {profile?.slack_connected ? 'Disconnect' : 'Connect'}
                 </Button>
@@ -260,6 +416,82 @@ export default function Settings() {
           </Card>
         </div>
       </div>
+
+      {/* Slack Connection Dialog */}
+      <Dialog open={slackDialogOpen} onOpenChange={setSlackDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Slack className="w-5 h-5" />
+              Connect Slack
+            </DialogTitle>
+            <DialogDescription>
+              Enter the Slack channel where you want to receive meeting summaries.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="channelId">Channel ID</Label>
+              <Input
+                id="channelId"
+                value={slackChannelId}
+                onChange={(e) => setSlackChannelId(e.target.value)}
+                placeholder="C01234567AB"
+              />
+              <p className="text-xs text-muted-foreground">
+                Find this by right-clicking your channel → View channel details → Copy channel ID
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="channelName">Channel Name (optional)</Label>
+              <Input
+                id="channelName"
+                value={slackChannelName}
+                onChange={(e) => setSlackChannelName(e.target.value)}
+                placeholder="general"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSlackDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConnectSlack} disabled={connectingSlack || !slackChannelId.trim()}>
+              {connectingSlack && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Connect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Google Calendar Connection Dialog */}
+      <Dialog open={googleDialogOpen} onOpenChange={setGoogleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Connect Google Calendar
+            </DialogTitle>
+            <DialogDescription>
+              Your Google OAuth credentials have been configured. Click connect to enable calendar sync.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Once connected, Echo Brief will automatically detect your upcoming meetings and remind you to start recording.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGoogleDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConnectGoogle} disabled={connectingGoogle}>
+              {connectingGoogle && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Connect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

@@ -180,12 +180,88 @@ Format your response as JSON with the following structure:
       })
       .eq("id", meetingId);
 
+    // Check if user has Slack connected and send message
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("slack_connected, slack_channel_id")
+      .eq("user_id", meeting.user_id)
+      .single();
+
+    let slackSent = false;
+    if (profile?.slack_connected && profile?.slack_channel_id) {
+      try {
+        const slackToken = Deno.env.get("SLACK_BOT_TOKEN");
+        if (slackToken) {
+          // Format and send Slack message directly
+          const actionItems = (insights.action_items || [])
+            .map((item: any) => `• ${item.task}${item.owner ? ` (@${item.owner})` : ""}`)
+            .join("\n") || "None identified";
+
+          const decisions = (insights.decisions || [])
+            .map((d: string) => `• ${d}`)
+            .join("\n") || "None identified";
+
+          const keyPoints = (insights.key_points || [])
+            .slice(0, 5)
+            .map((p: string) => `• ${p}`)
+            .join("\n") || "None identified";
+
+          const durationMinutes = Math.round(durationSeconds / 60);
+
+          const blocks = [
+            {
+              type: "header",
+              text: { type: "plain_text", text: `📝 Meeting Summary: ${meeting.title}`, emoji: true },
+            },
+            {
+              type: "section",
+              text: { type: "mrkdwn", text: `*Duration:* ${durationMinutes} minutes\n*Date:* ${new Date(meeting.start_time).toLocaleDateString()}` },
+            },
+            { type: "divider" },
+            { type: "section", text: { type: "mrkdwn", text: `*Summary*\n${insights.summary_short || "No summary available"}` } },
+            { type: "section", text: { type: "mrkdwn", text: `*🎯 Key Points*\n${keyPoints}` } },
+            { type: "section", text: { type: "mrkdwn", text: `*✅ Action Items*\n${actionItems}` } },
+            { type: "section", text: { type: "mrkdwn", text: `*📋 Decisions*\n${decisions}` } },
+          ];
+
+          const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${slackToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              channel: profile.slack_channel_id,
+              blocks,
+              text: `Meeting Summary: ${meeting.title}`,
+            }),
+          });
+
+          const slackResult = await slackResponse.json();
+          slackSent = slackResult.ok;
+
+          // Log Slack message
+          await supabase.from("slack_messages").insert({
+            meeting_id: meetingId,
+            channel_id: profile.slack_channel_id,
+            status: slackResult.ok ? "sent" : "failed",
+            message_ts: slackResult.ts || null,
+            sent_at: slackResult.ok ? new Date().toISOString() : null,
+            error_message: slackResult.ok ? null : slackResult.error,
+          });
+        }
+      } catch (slackError) {
+        console.error("Slack notification error:", slackError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         meetingId,
         hasTranscript: !!transcript,
         hasInsights: true,
+        slackSent,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
