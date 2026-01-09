@@ -84,13 +84,22 @@ serve(async (req) => {
 
         transcript = transcription.text;
 
-        // Save transcript
-        await supabase.from("transcripts").insert({
-          meeting_id: meetingId,
-          content: transcript,
-          speakers: [],
-          word_timestamps: (transcription as any).words || [],
-        });
+        // Check if transcript already exists for this meeting
+        const { data: existingTranscript } = await supabase
+          .from("transcripts")
+          .select("id")
+          .eq("meeting_id", meetingId)
+          .single();
+
+        if (!existingTranscript) {
+          // Save transcript only if it doesn't exist
+          await supabase.from("transcripts").insert({
+            meeting_id: meetingId,
+            content: transcript,
+            speakers: [],
+            word_timestamps: (transcription as any).words || [],
+          });
+        }
       } catch (transcribeError) {
         console.error("Transcription error:", transcribeError);
         // Continue with empty transcript if transcription fails
@@ -153,17 +162,26 @@ Format your response as JSON with the following structure:
       };
     }
 
-    // Save insights
-    await supabase.from("meeting_insights").insert({
-      meeting_id: meetingId,
-      summary_short: insights.summary_short || "",
-      summary_detailed: insights.summary_detailed || "",
-      key_points: insights.key_points || [],
-      action_items: insights.action_items || [],
-      decisions: insights.decisions || [],
-      risks: insights.risks || [],
-      follow_ups: insights.follow_ups || [],
-    });
+    // Check if insights already exist for this meeting
+    const { data: existingInsights } = await supabase
+      .from("meeting_insights")
+      .select("id")
+      .eq("meeting_id", meetingId)
+      .single();
+
+    if (!existingInsights) {
+      // Save insights only if they don't exist
+      await supabase.from("meeting_insights").insert({
+        meeting_id: meetingId,
+        summary_short: insights.summary_short || "",
+        summary_detailed: insights.summary_detailed || "",
+        key_points: insights.key_points || [],
+        action_items: insights.action_items || [],
+        decisions: insights.decisions || [],
+        risks: insights.risks || [],
+        follow_ups: insights.follow_ups || [],
+      });
+    }
 
     // Calculate duration if we have end_time
     const endTime = new Date();
@@ -188,9 +206,13 @@ Format your response as JSON with the following structure:
       .single();
 
     let slackSent = false;
+    console.log("Checking Slack connection:", { slack_connected: profile?.slack_connected, channel_id: profile?.slack_channel_id });
+    
     if (profile?.slack_connected && profile?.slack_channel_id) {
       try {
         const slackToken = Deno.env.get("SLACK_BOT_TOKEN");
+        console.log("Slack token exists:", !!slackToken);
+        
         if (slackToken) {
           // Format and send Slack message directly
           const actionItems = (insights.action_items || [])
@@ -238,6 +260,7 @@ Format your response as JSON with the following structure:
           });
 
           const slackResult = await slackResponse.json();
+          console.log("Slack API response:", JSON.stringify(slackResult));
           slackSent = slackResult.ok;
 
           // Log Slack message
