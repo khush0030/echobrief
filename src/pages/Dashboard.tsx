@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { RecordingButton } from '@/components/dashboard/RecordingButton';
 import { MeetingCard } from '@/components/dashboard/MeetingCard';
@@ -9,11 +10,21 @@ import { Meeting } from '@/types/meeting';
 import { Input } from '@/components/ui/input';
 import { Search, Loader2 } from 'lucide-react';
 
+interface PrefillMeeting {
+  title: string;
+  calendarEventId?: string;
+  meetingLink?: string;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Get prefilled meeting data from calendar navigation
+  const prefillMeeting = (location.state as { prefillMeeting?: PrefillMeeting })?.prefillMeeting;
 
   useEffect(() => {
     if (!user) return;
@@ -92,7 +103,12 @@ export default function Dashboard() {
               Record meetings and get AI-powered insights
             </p>
           </div>
-          <RecordingButton onRecordingComplete={handleRecordingComplete} />
+          <RecordingButton 
+            onRecordingComplete={handleRecordingComplete}
+            prefillTitle={prefillMeeting?.title}
+            calendarEventId={prefillMeeting?.calendarEventId}
+            meetingLink={prefillMeeting?.meetingLink}
+          />
         </div>
 
         {/* Stats */}

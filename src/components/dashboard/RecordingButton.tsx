@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Dialog, 
@@ -18,11 +18,19 @@ import { cn } from '@/lib/utils';
 
 interface RecordingButtonProps {
   onRecordingComplete?: (meetingId: string) => void;
+  prefillTitle?: string;
+  calendarEventId?: string;
+  meetingLink?: string;
 }
 
-export function RecordingButton({ onRecordingComplete }: RecordingButtonProps) {
+export function RecordingButton({ 
+  onRecordingComplete, 
+  prefillTitle, 
+  calendarEventId, 
+  meetingLink 
+}: RecordingButtonProps) {
   const [showDialog, setShowDialog] = useState(false);
-  const [meetingTitle, setMeetingTitle] = useState('');
+  const [meetingTitle, setMeetingTitle] = useState(prefillTitle || '');
   const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const { user } = useAuth();
@@ -42,6 +50,14 @@ export function RecordingButton({ onRecordingComplete }: RecordingButtonProps) {
     requestPermissions,
   } = useAudioRecorder();
 
+  // Auto-open dialog if prefillTitle is provided
+  useEffect(() => {
+    if (prefillTitle && !isRecording) {
+      setMeetingTitle(prefillTitle);
+      setShowDialog(true);
+    }
+  }, [prefillTitle, isRecording]);
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -54,13 +70,15 @@ export function RecordingButton({ onRecordingComplete }: RecordingButtonProps) {
     setIsStarting(true);
     
     try {
-      // Create meeting record
+      // Create meeting record with calendar event data if available
       const { data: meeting, error: meetingError } = await supabase
         .from('meetings')
         .insert({
           user_id: user.id,
           title: meetingTitle || `Meeting ${new Date().toLocaleDateString()}`,
-          source: 'manual',
+          source: calendarEventId ? 'calendar' : 'manual',
+          calendar_event_id: calendarEventId || null,
+          meeting_link: meetingLink || null,
           status: 'recording',
           start_time: new Date().toISOString(),
         })
