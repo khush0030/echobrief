@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Home, 
+  Mic,
   Calendar, 
   CheckSquare, 
   Settings, 
@@ -19,6 +20,7 @@ interface SidebarProps {
 
 const navItems = [
   { icon: Home, label: 'Home', path: '/dashboard' },
+  { icon: Mic, label: 'Recordings', path: '/recordings' },
   { icon: Calendar, label: 'Calendar', path: '/calendar' },
   { icon: CheckSquare, label: 'Action Items', path: '/action-items' },
   { icon: Settings, label: 'Settings', path: '/settings' },
