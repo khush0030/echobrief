@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RecordingProvider } from "@/contexts/RecordingContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ExtensionTokenSync } from "@/components/ExtensionTokenSync";
 import { GlobalRecordingPanel } from "@/components/dashboard/GlobalRecordingPanel";
 import { PreMeetingNotification } from "@/components/dashboard/PreMeetingNotification";
 import Landing from "./pages/Landing";
@@ -34,6 +35,7 @@ function AppRoutes() {
 
   return (
     <>
+      <ExtensionTokenSync />
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         <Route path="/auth" element={user ? <Navigate to="/dashboard" /> : <Auth />} />

@@ -1,6 +1,6 @@
 // EchoBrief Popup Script
-
-const ECHOBRIEF_URL = 'https://echobrief.lovable.app';
+// Use localhost for local development; change to production URL when needed
+const ECHOBRIEF_URL = 'http://localhost:8080';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const contentEl = document.getElementById('content');
@@ -13,14 +13,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   
-  // Get recording status
-  chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (response) => {
-    if (response?.isRecording) {
-      showRecordingStatus(contentEl, response);
-    } else {
-      showIdleStatus(contentEl);
-    }
-  });
+  // Get recording status and current tab
+  const [statusResponse, tabs] = await Promise.all([
+    new Promise((r) => chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, r)),
+    chrome.tabs.query({ active: true, currentWindow: true })
+  ]);
+
+  const currentTab = tabs[0];
+  const url = currentTab?.url || '';
+  const isMeetingTab = /^https:\/\/meet\.google\.com\/.+\/?/.test(url) || /^https:\/\/.*\.zoom\.us\/(wc|j)\//.test(url);
+
+  if (statusResponse?.isRecording) {
+    showRecordingStatus(contentEl, statusResponse);
+  } else if (isMeetingTab) {
+    showMeetingReadyStatus(contentEl, currentTab);
+  } else {
+    showIdleStatus(contentEl);
+  }
 });
 
 function showLoginPrompt(container) {
@@ -67,6 +76,43 @@ function showRecordingStatus(container, status) {
   });
 }
 
+function showMeetingReadyStatus(container, tab) {
+  container.innerHTML = `
+    <div class="status-card">
+      <div class="status-header">
+        <span class="status-dot ready"></span>
+        <span class="status-text">Meeting detected</span>
+      </div>
+      <div class="status-detail">
+        Click below to start recording this meeting.
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="start-btn">Start Recording</button>
+    </div>
+  `;
+  
+  document.getElementById('start-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('start-btn');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+    try {
+      const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+      await chrome.runtime.sendMessage({
+        type: 'START_RECORDING_WITH_STREAM_ID',
+        streamId,
+        tabId: tab.id,
+        url: tab.url
+      });
+      showRecordingStatus(container, { isRecording: true, meetingTitle: 'Meeting', duration: 0 });
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Start Recording';
+      alert(err.message || 'Failed to start recording. Make sure this tab is active.');
+    }
+  });
+}
+
 function showIdleStatus(container) {
   container.innerHTML = `
     <div class="status-card">
@@ -75,7 +121,7 @@ function showIdleStatus(container) {
         <span class="status-text">Ready</span>
       </div>
       <div class="status-detail">
-        Recording will start automatically when you join a meeting on Google Meet or Zoom.
+        Open a Google Meet or Zoom Web meeting, then click the extension and click Start Recording.
       </div>
     </div>
     <div class="actions">

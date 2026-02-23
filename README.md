@@ -50,6 +50,18 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## EchoBrief Setup
+
+### Chrome Extension
+1. Open `chrome://extensions/`, enable Developer mode, click "Load unpacked"
+2. Select the `chrome-extension` folder
+3. Log in at `http://localhost:8080`, then the extension will sync your session automatically
+
+### OpenAI (Whisper + Summaries)
+- **Local functions:** Copy `OPENAI_API_KEY` from `.env` to `supabase/.env.local`, then run `npm run functions:serve`
+- **Deployed Supabase:** Set `OPENAI_API_KEY` in Supabase Dashboard → Edge Functions → Secrets
+- See [overview.md](overview.md) for full details
+
 ## What technologies are used for this project?
 
 This project is built with:

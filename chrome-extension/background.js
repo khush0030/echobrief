@@ -1,5 +1,5 @@
 // EchoBrief Background Service Worker
-// Handles tab audio capture and communication with the web app
+// Uses getMediaStreamId + offscreen document for tab capture (MV3 compatible)
 
 const ECHOBRIEF_API_URL = 'https://hxwweanctnkmgjvkxsql.supabase.co/functions/v1';
 const MEETING_URL_PATTERNS = [
@@ -12,307 +12,171 @@ let recordingState = {
   isRecording: false,
   tabId: null,
   meetingId: null,
-  mediaRecorder: null,
-  audioChunks: [],
   startTime: null,
   meetingTitle: '',
   meetingUrl: ''
 };
 
-// Check if URL is a meeting
 function isMeetingUrl(url) {
-  return MEETING_URL_PATTERNS.some(pattern => pattern.test(url));
+  return MEETING_URL_PATTERNS.some((p) => p.test(url));
 }
 
-// Extract meeting title from URL
 function getMeetingTitle(url) {
   try {
-    const urlObj = new URL(url);
-    if (urlObj.hostname === 'meet.google.com') {
-      return `Google Meet - ${urlObj.pathname.slice(1)}`;
-    } else if (urlObj.hostname.includes('zoom.us')) {
-      const meetingId = urlObj.pathname.split('/').pop();
-      return `Zoom Meeting - ${meetingId}`;
-    }
-  } catch (e) {
-    console.error('Error parsing meeting URL:', e);
-  }
+    const u = new URL(url);
+    if (u.hostname === 'meet.google.com') return `Google Meet - ${u.pathname.slice(1)}`;
+    if (u.hostname.includes('zoom.us')) return `Zoom Meeting - ${u.pathname.split('/').pop()}`;
+  } catch (e) {}
   return 'Meeting Recording';
 }
 
-// Listen for tab updates to detect meeting joins
+// Listen for tab updates - show notification only (no auto-start; requires user gesture)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url) {
-    if (isMeetingUrl(tab.url) && !recordingState.isRecording) {
-      console.log('Meeting detected:', tab.url);
-      
-      // Notify content script to show pre-meeting notification
-      chrome.tabs.sendMessage(tabId, {
-        type: 'MEETING_DETECTED',
-        url: tab.url,
-        title: getMeetingTitle(tab.url)
-      }).catch(() => {
-        // Content script might not be ready yet
-        console.log('Content script not ready, will retry');
-      });
-      
-      // Auto-start recording after a short delay to let meeting initialize
-      setTimeout(() => {
-        if (!recordingState.isRecording) {
-          startRecording(tabId, tab.url);
-        }
-      }, 5000); // Wait 5 seconds for meeting to initialize
-    }
+  if (changeInfo.status === 'complete' && tab?.url && isMeetingUrl(tab.url) && !recordingState.isRecording) {
+    chrome.tabs.sendMessage(tabId, {
+      type: 'MEETING_DETECTED',
+      url: tab.url,
+      title: getMeetingTitle(tab.url)
+    }).catch(() => {});
   }
 });
 
-// Listen for tab closure to stop recording
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (recordingState.tabId === tabId && recordingState.isRecording) {
-    console.log('Meeting tab closed, stopping recording');
     stopRecording();
   }
 });
 
-// Handle messages from content script and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background received message:', message.type);
-  
   switch (message.type) {
     case 'GET_RECORDING_STATUS':
       sendResponse({
         isRecording: recordingState.isRecording,
         meetingTitle: recordingState.meetingTitle,
-        duration: recordingState.startTime 
+        duration: recordingState.startTime
           ? Math.floor((Date.now() - recordingState.startTime) / 1000)
           : 0
       });
       break;
-      
+
     case 'START_RECORDING':
       if (sender.tab) {
-        startRecording(sender.tab.id, sender.tab.url);
-        sendResponse({ success: true });
+        startRecordingFromTab(sender.tab.id, sender.tab.url).then(sendResponse).catch((err) => {
+          sendResponse({ error: err.message });
+        });
       }
-      break;
-      
+      return true;
+
+    case 'START_RECORDING_WITH_STREAM_ID':
+      startRecordingWithStreamId(message).then(sendResponse).catch((err) => {
+        sendResponse({ error: err.message });
+      });
+      return true;
+
     case 'STOP_RECORDING':
       stopRecording();
       sendResponse({ success: true });
       break;
-      
+
     case 'SET_AUTH_TOKEN':
       chrome.storage.local.set({ authToken: message.token });
       sendResponse({ success: true });
       break;
+
+    case 'RECORDING_COMPLETED':
+    case 'RECORDING_FAILED': {
+      const tabId = recordingState.tabId;
+      resetState();
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, {
+          type: message.type === 'RECORDING_COMPLETED' ? 'RECORDING_UPLOADED' : 'RECORDING_ERROR',
+          error: message.type === 'RECORDING_FAILED' ? 'Recording failed' : undefined,
+          meetingId: message.meetingId
+        }).catch(() => {});
+      }
+      break;
+    }
+
+    case 'CLOSE_OFFSCREEN':
+      chrome.offscreen.hasDocument().then((has) => {
+        if (has) chrome.offscreen.closeDocument();
+      }).catch(() => {});
+      break;
   }
-  
-  return true; // Keep message channel open for async response
+  return true;
 });
 
-// Start recording tab audio
-async function startRecording(tabId, url) {
-  if (recordingState.isRecording) {
-    console.log('Already recording');
-    return;
-  }
-  
+async function startRecordingFromTab(tabId, url) {
+  if (recordingState.isRecording) return { error: 'Already recording' };
+  if (!isMeetingUrl(url)) return { error: 'Not a meeting page' };
+
+  const { authToken } = await chrome.storage.local.get('authToken');
+  if (!authToken) return { error: 'Please log in to EchoBrief first' };
+
+  let streamId;
   try {
-    console.log('Starting tab capture for tab:', tabId);
-    
-    // Get auth token
-    const { authToken } = await chrome.storage.local.get('authToken');
-    if (!authToken) {
-      console.error('No auth token - user must log in');
-      chrome.tabs.sendMessage(tabId, { 
-        type: 'RECORDING_ERROR', 
-        error: 'Please log in to EchoBrief first' 
-      }).catch(() => {});
-      return;
-    }
-    
-    // Capture tab audio
-    const stream = await chrome.tabCapture.capture({
-      audio: true,
-      video: false
-    });
-    
-    if (!stream) {
-      throw new Error('Failed to capture tab audio');
-    }
-    
-    // Set up MediaRecorder
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: 'audio/webm;codecs=opus'
-    });
-    
-    recordingState = {
-      isRecording: true,
-      tabId,
-      mediaRecorder,
-      audioChunks: [],
-      startTime: Date.now(),
-      meetingTitle: getMeetingTitle(url),
-      meetingUrl: url,
-      meetingId: null,
-      stream
-    };
-    
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordingState.audioChunks.push(event.data);
-      }
-    };
-    
-    mediaRecorder.onstop = async () => {
-      console.log('MediaRecorder stopped, processing audio');
-      await processRecording();
-    };
-    
-    mediaRecorder.start(1000); // Collect data every second
-    
-    // Notify content script
-    chrome.tabs.sendMessage(tabId, { 
-      type: 'RECORDING_STARTED',
-      title: recordingState.meetingTitle
-    }).catch(() => {});
-    
-    console.log('Recording started for:', recordingState.meetingTitle);
-    
-  } catch (error) {
-    console.error('Failed to start recording:', error);
-    chrome.tabs.sendMessage(tabId, { 
-      type: 'RECORDING_ERROR', 
-      error: error.message 
-    }).catch(() => {});
+    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  } catch (err) {
+    return { error: err.message || 'Tab capture not available. Make sure the meeting tab is active and you have not already granted capture to another app.' };
   }
+
+  await startRecordingWithStreamId({ streamId, tabId, url });
+  return { success: true };
 }
 
-// Stop recording
-function stopRecording() {
-  if (!recordingState.isRecording || !recordingState.mediaRecorder) {
-    console.log('Not recording');
-    return;
-  }
-  
-  console.log('Stopping recording');
-  
-  // Stop the media recorder
-  if (recordingState.mediaRecorder.state !== 'inactive') {
-    recordingState.mediaRecorder.stop();
-  }
-  
-  // Stop all tracks
-  if (recordingState.stream) {
-    recordingState.stream.getTracks().forEach(track => track.stop());
-  }
-  
-  // Notify content script
-  if (recordingState.tabId) {
-    chrome.tabs.sendMessage(recordingState.tabId, { 
-      type: 'RECORDING_STOPPED'
-    }).catch(() => {});
-  }
-}
+async function startRecordingWithStreamId({ streamId, tabId, url }) {
+  if (recordingState.isRecording) return;
 
-// Process and upload recording
-async function processRecording() {
-  try {
-    const { authToken } = await chrome.storage.local.get('authToken');
-    if (!authToken) {
-      console.error('No auth token for upload');
-      notifyError('Please log in to EchoBrief first');
-      resetState();
-      return;
-    }
-    
-    // Create audio blob
-    const audioBlob = new Blob(recordingState.audioChunks, { type: 'audio/webm' });
-    const durationSeconds = Math.floor((Date.now() - recordingState.startTime) / 1000);
-    
-    console.log('Processing recording:', {
-      title: recordingState.meetingTitle,
-      duration: durationSeconds,
-      size: audioBlob.size
+  const meetingTitle = getMeetingTitle(url);
+  recordingState = {
+    isRecording: true,
+    tabId,
+    meetingId: null,
+    startTime: Date.now(),
+    meetingTitle,
+    meetingUrl: url
+  };
+
+  const hasOffscreen = await chrome.offscreen.hasDocument();
+  if (!hasOffscreen) {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['USER_MEDIA'],
+      justification: 'Recording meeting audio via tabCapture'
     });
+  }
 
-    // Check for empty or too short recording
-    if (audioBlob.size < 1000) {
-      console.error('Recording is empty or too small:', audioBlob.size);
-      notifyError('Recording failed - no audio captured');
-      resetState();
-      return;
-    }
+  const { authToken } = await chrome.storage.local.get('authToken');
 
-    if (durationSeconds < 5) {
-      console.error('Recording too short:', durationSeconds);
-      notifyError('Recording too short - minimum 5 seconds');
-      resetState();
-      return;
-    }
-    
-    // Upload to EchoBrief
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    formData.append('title', recordingState.meetingTitle);
-    formData.append('source', 'chrome-extension');
-    formData.append('meeting_url', recordingState.meetingUrl);
-    formData.append('duration_seconds', durationSeconds.toString());
-    
-    const response = await fetch(`${ECHOBRIEF_API_URL}/upload-recording`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authToken}`
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Upload failed:', response.status, errorText);
-      throw new Error(`Upload failed: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    console.log('Recording uploaded successfully:', result);
-    
-    // Notify content script of success
-    if (recordingState.tabId) {
-      chrome.tabs.sendMessage(recordingState.tabId, { 
-        type: 'RECORDING_UPLOADED',
-        meetingId: result.meetingId
-      }).catch(() => {});
-    }
-    
-  } catch (error) {
-    console.error('Failed to process recording:', error);
-    notifyError('Failed to upload recording');
-  } finally {
+  chrome.runtime.sendMessage({
+    target: 'offscreen',
+    type: 'start-recording',
+    data: { streamId, meetingTitle, meetingUrl: url, authToken }
+  }).catch((err) => {
+    console.error('Failed to start offscreen recording:', err);
     resetState();
-  }
+    if (tabId) chrome.tabs.sendMessage(tabId, { type: 'RECORDING_ERROR', error: err.message }).catch(() => {});
+  });
+
+  chrome.tabs.sendMessage(tabId, { type: 'RECORDING_STARTED', title: meetingTitle }).catch(() => {});
 }
 
-// Helper to notify errors
-function notifyError(message) {
-  if (recordingState.tabId) {
-    chrome.tabs.sendMessage(recordingState.tabId, { 
-      type: 'RECORDING_ERROR', 
-      error: message
-    }).catch(() => {});
-  }
+function stopRecording() {
+  if (!recordingState.isRecording) return;
+
+  const tabId = recordingState.tabId;
+  chrome.runtime.sendMessage({ target: 'offscreen', type: 'stop-recording' }).catch(() => {});
+  chrome.tabs.sendMessage(tabId, { type: 'RECORDING_STOPPED' }).catch(() => {});
+  resetState();
 }
 
-// Reset recording state
 function resetState() {
   recordingState = {
     isRecording: false,
     tabId: null,
     meetingId: null,
-    mediaRecorder: null,
-    audioChunks: [],
     startTime: null,
     meetingTitle: '',
-    meetingUrl: '',
-    stream: null
+    meetingUrl: ''
   };
 }

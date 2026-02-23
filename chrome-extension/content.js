@@ -1,5 +1,6 @@
 // EchoBrief Content Script
-// Injected into meeting pages to show recording status
+// Injected into meeting pages - shows recording status UI only
+// Tab capture runs in offscreen document (triggered from popup with user gesture)
 
 let statusIndicator = null;
 let notificationBanner = null;
@@ -144,7 +145,7 @@ function showNotification(title) {
     <div class="echobrief-banner">
       <span class="echobrief-banner-icon">🎙️</span>
       <span class="echobrief-banner-text">
-        EchoBrief will automatically record this meeting
+        Click the EchoBrief extension icon and Start Recording to capture this meeting
       </span>
       <button class="echobrief-banner-dismiss" id="echobrief-dismiss">Got it</button>
     </div>
@@ -187,14 +188,14 @@ function hideStatus() {
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script received:', message.type);
-  
+
   switch (message.type) {
     case 'MEETING_DETECTED':
       showNotification(message.title);
       createStatusIndicator();
-      updateStatus('preparing', '🟡 Preparing...');
+      updateStatus('preparing', '🟡 Click the extension icon and Start Recording');
       break;
-      
+
     case 'RECORDING_STARTED':
       if (notificationBanner) {
         notificationBanner.remove();
@@ -203,23 +204,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       updateStatus('recording', '', 0);
       startDurationTimer();
       break;
-      
+
     case 'RECORDING_STOPPED':
       updateStatus('success', '✓ Recording saved');
       setTimeout(hideStatus, 3000);
       break;
-      
+
     case 'RECORDING_UPLOADED':
       updateStatus('success', '✓ Sent for processing');
       setTimeout(hideStatus, 3000);
       break;
-      
+
     case 'RECORDING_ERROR':
       updateStatus('error', `⚠️ ${message.error}`);
       setTimeout(hideStatus, 5000);
       break;
   }
-  
+
   sendResponse({ received: true });
   return true;
 });
@@ -251,9 +252,18 @@ window.addEventListener('beforeunload', () => {
   stopDurationTimer();
 });
 
+function isExtensionContextValid() {
+  try {
+    return !!chrome.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
 // Listen for messages from the web app (for status checks)
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
+  if (!isExtensionContextValid()) return;
   
   if (event.data?.type === 'ECHOBRIEF_EXTENSION_PING') {
     window.postMessage({ 
@@ -263,20 +273,35 @@ window.addEventListener('message', (event) => {
   }
   
   if (event.data?.type === 'ECHOBRIEF_GET_STATUS') {
-    chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (response) => {
+    try {
+      chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATUS' }, (response) => {
+        window.postMessage({
+          type: 'ECHOBRIEF_STATUS_RESPONSE',
+          status: response || { isRecording: false }
+        }, '*');
+      });
+    } catch {
       window.postMessage({
         type: 'ECHOBRIEF_STATUS_RESPONSE',
-        status: response || { isRecording: false }
+        status: { isRecording: false }
       }, '*');
-    });
+    }
+  }
+
+  if (event.data?.type === 'ECHOBRIEF_SET_TOKEN' && event.data.token) {
+    try {
+      chrome.runtime.sendMessage({ type: 'SET_AUTH_TOKEN', token: event.data.token });
+    } catch {}
   }
 });
 
 // Inject a marker element so the web app can detect the extension
-const marker = document.createElement('div');
-marker.id = 'echobrief-extension-marker';
-marker.style.display = 'none';
-marker.dataset.extensionId = chrome.runtime.id;
-document.body.appendChild(marker);
+if (isExtensionContextValid()) {
+  const marker = document.createElement('div');
+  marker.id = 'echobrief-extension-marker';
+  marker.style.display = 'none';
+  marker.dataset.extensionId = chrome.runtime.id;
+  document.body.appendChild(marker);
+}
 
 console.log('EchoBrief content script loaded');

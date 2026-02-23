@@ -227,9 +227,17 @@ VITE_SUPABASE_PROJECT_ID=hxwweanctnkmgjvkxsql
 ### Supabase Secrets (Edge Functions)
 
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` – Auto-injected
-- `OPENAI_API_KEY` – Required for `process-meeting`
+- `OPENAI_API_KEY` – Required for `process-meeting` (Whisper transcription + GPT summaries)
 - Google OAuth credentials (client ID/secret)
 - Slack app credentials
+
+**Local development:** Create `supabase/.env.local` with `OPENAI_API_KEY` (copy from project root `.env`). Then run:
+```bash
+npm run functions:serve
+# or: supabase functions serve --env-file ./supabase/.env.local
+```
+
+**Deployed Supabase:** Set `OPENAI_API_KEY` in Supabase Dashboard → Project Settings → Edge Functions → Secrets.
 
 ---
 
@@ -265,7 +273,7 @@ Runs at `http://localhost:8080` (or configured port).
 ```bash
 supabase start    # Start local Supabase
 supabase db push  # Apply migrations
-supabase functions serve  # Serve Edge Functions locally
+npm run functions:serve   # Serve Edge Functions with OPENAI_API_KEY from supabase/.env.local
 ```
 
 ### NPM Scripts
@@ -277,6 +285,7 @@ supabase functions serve  # Serve Edge Functions locally
 | `build:dev` | `vite build --mode development` |
 | `preview` | `vite preview` – preview production build |
 | `lint` | `eslint .` |
+| `functions:serve` | `supabase functions serve --env-file ./supabase/.env.local` |
 
 ---
 
