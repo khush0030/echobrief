@@ -10,6 +10,37 @@ interface SpeakerSegment {
   end?: number;
 }
 
+function isLikelyHallucination(text: string): boolean {
+  if (!text || text.trim().length === 0) return true;
+
+  const words = text.trim().toLowerCase().split(/\s+/);
+  if (words.length === 0) return true;
+
+  const uniqueWords = new Set(words);
+  const uniqueRatio = uniqueWords.size / words.length;
+
+  // Extremely low word diversity (e.g. "you you you you you you")
+  if (words.length >= 5 && uniqueRatio < 0.2) return true;
+
+  // Known Whisper silence-hallucination patterns
+  const cleaned = text.trim().toLowerCase().replace(/[.,!?]/g, "");
+  const patterns = [
+    /^(\s*you\s*)+$/,
+    /^(\s*thank you\s*)+$/,
+    /^(\s*thanks for watching\s*)+$/,
+    /^(\s*please subscribe\s*)+$/,
+    /^(\s*bye\s*)+$/,
+    /^(\s*so\s*)+$/,
+    /^(\s*um\s*)+$/,
+    /^(\s*uh\s*)+$/,
+    /^(\s*oh\s*)+$/,
+    /^(\s*okay\s*)+$/,
+  ];
+  if (patterns.some((p) => p.test(cleaned))) return true;
+
+  return false;
+}
+
 serve(async (req) => {
   const corsResponse = handleCorsPrelight(req);
   if (corsResponse) return corsResponse;
@@ -92,17 +123,26 @@ serve(async (req) => {
         transcript = transcription.text;
         wordTimestamps = (transcription as any).words || [];
 
-        // Extract segments for speaker attribution
-        const segments = (transcription as any).segments || [];
-        
-        // Format attendees for speaker matching
-        const attendeesList = (meeting.attendees || [])
-          .map((a: any) => a.displayName || a.email?.split('@')[0])
-          .filter(Boolean);
+        // Detect Whisper hallucination (silence → repetitive gibberish like "you you you")
+        const hallucinated = isLikelyHallucination(transcript);
+        if (hallucinated) {
+          console.warn("Hallucinated transcript detected, discarding:", transcript);
+          transcript = "";
+          wordTimestamps = [];
+        }
 
-        // Use AI to attribute speakers to segments
-        if (segments.length > 0 && attendeesList.length > 0) {
-          const speakerPrompt = `Given a meeting with these participants: ${attendeesList.join(', ')}
+        if (!hallucinated) {
+          // Extract segments for speaker attribution
+          const segments = (transcription as any).segments || [];
+
+          // Format attendees for speaker matching
+          const attendeesList = (meeting.attendees || [])
+            .map((a: any) => a.displayName || a.email?.split('@')[0])
+            .filter(Boolean);
+
+          // Use AI to attribute speakers to segments
+          if (segments.length > 0 && attendeesList.length > 0) {
+            const speakerPrompt = `Given a meeting with these participants: ${attendeesList.join(', ')}
 
 Analyze these transcript segments and identify which participant is most likely speaking in each segment based on context, speaking style, and content. If you can't confidently identify a speaker, use "Speaker 1", "Speaker 2", etc.
 
@@ -116,51 +156,50 @@ Respond with a JSON array where each element has:
 
 Only include segments where you can make a reasonable attribution.`;
 
-          try {
-            const speakerAttribution = await openai.chat.completions.create({
-              model: "gpt-4o-mini",
-              messages: [
-                {
-                  role: "system",
-                  content: "You are an expert at identifying speakers in meeting transcripts. Be conservative - only attribute speakers when you're reasonably confident."
-                },
-                { role: "user", content: speakerPrompt }
-              ],
-              response_format: { type: "json_object" },
-            });
-
-            const attributionText = speakerAttribution.choices[0]?.message?.content || "{}";
-            const attributions = JSON.parse(attributionText);
-            const attributionMap = new Map();
-            
-            if (Array.isArray(attributions.speakers)) {
-              attributions.speakers.forEach((a: any) => {
-                if (a.confidence !== "low") {
-                  attributionMap.set(a.segment_index, a.speaker);
-                }
+            try {
+              const speakerAttribution = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content: "You are an expert at identifying speakers in meeting transcripts. Be conservative - only attribute speakers when you're reasonably confident."
+                  },
+                  { role: "user", content: speakerPrompt }
+                ],
+                response_format: { type: "json_object" },
               });
-            }
 
-            // Build speaker segments with attribution
-            speakerSegments = segments.map((s: any, i: number) => ({
-              speaker: attributionMap.get(i) || `Speaker ${(i % 2) + 1}`,
-              text: s.text,
-              start: s.start,
-              end: s.end,
-            }));
-          } catch (speakerError) {
-            console.error("Speaker attribution error:", speakerError);
-            // Fallback to alternating speakers
-            speakerSegments = segments.map((s: any, i: number) => ({
-              speaker: `Speaker ${(i % 2) + 1}`,
-              text: s.text,
-              start: s.start,
-              end: s.end,
-            }));
+              const attributionText = speakerAttribution.choices[0]?.message?.content || "{}";
+              const attributions = JSON.parse(attributionText);
+              const attributionMap = new Map();
+
+              if (Array.isArray(attributions.speakers)) {
+                attributions.speakers.forEach((a: any) => {
+                  if (a.confidence !== "low") {
+                    attributionMap.set(a.segment_index, a.speaker);
+                  }
+                });
+              }
+
+              speakerSegments = segments.map((s: any, i: number) => ({
+                speaker: attributionMap.get(i) || `Speaker ${(i % 2) + 1}`,
+                text: s.text,
+                start: s.start,
+                end: s.end,
+              }));
+            } catch (speakerError) {
+              console.error("Speaker attribution error:", speakerError);
+              speakerSegments = segments.map((s: any, i: number) => ({
+                speaker: `Speaker ${(i % 2) + 1}`,
+                text: s.text,
+                start: s.start,
+                end: s.end,
+              }));
+            }
           }
         }
 
-        // Check if transcript already exists for this meeting
+        // Save transcript (or a clear message if audio was silent)
         const { data: existingTranscript } = await supabase
           .from("transcripts")
           .select("id")
@@ -168,17 +207,18 @@ Only include segments where you can make a reasonable attribution.`;
           .single();
 
         if (!existingTranscript) {
-          // Save transcript with speaker segments
           await supabase.from("transcripts").insert({
             meeting_id: meetingId,
-            content: transcript,
+            content: hallucinated
+              ? "No clear speech was detected in this recording. The audio may have been too quiet or contained only background noise. Make sure your microphone is working and that meeting participants are audible."
+              : transcript,
             speakers: speakerSegments,
             word_timestamps: wordTimestamps,
           });
         }
       } catch (transcribeError) {
         console.error("Transcription error:", transcribeError);
-        transcript = "Transcription failed. Please check the audio file.";
+        transcript = "";
       }
     }
 
@@ -190,13 +230,33 @@ Only include segments where you can make a reasonable attribution.`;
       ? `\n\nMEETING PARTICIPANTS:\n${attendeesList.join(', ')}`
       : '';
 
-    // Build transcript with speaker labels for better AI analysis
-    const speakerLabeledTranscript = speakerSegments.length > 0
-      ? speakerSegments.map(s => `${s.speaker}: ${s.text}`).join('\n')
-      : transcript;
+    let insights;
+    const noUsableTranscript = !transcript || transcript.trim().length < 20;
 
-    // Generate decision-grade AI insights with enhanced prompt
-    const insightsPrompt = `You are an intelligent chief-of-staff analyzing a meeting transcript. Your goal is to produce a decision-grade insight report that provides clarity, ownership, risk awareness, and next steps — not just meeting notes.
+    if (noUsableTranscript) {
+      // No usable audio — skip the expensive AI call entirely
+      insights = {
+        summary_short: "No clear speech was detected in this recording. This usually means the meeting audio was too quiet, the microphone was muted, or the recording only captured silence. Try ensuring your microphone is unmuted and meeting participants are audible.",
+        summary_detailed: "",
+        strategic_insights: [],
+        speaker_highlights: [],
+        key_points: [],
+        action_items: [],
+        decisions: [],
+        risks: [],
+        open_questions: [],
+        follow_ups: [],
+        timeline_entries: [],
+        meeting_metrics: { engagement_score: 0, sentiment_score: 0, speaker_participation: [] },
+      };
+    } else {
+      // Build transcript with speaker labels for better AI analysis
+      const speakerLabeledTranscript = speakerSegments.length > 0
+        ? speakerSegments.map(s => `${s.speaker}: ${s.text}`).join('\n')
+        : transcript;
+
+      // Generate decision-grade AI insights with enhanced prompt
+      const insightsPrompt = `You are an intelligent chief-of-staff analyzing a meeting transcript. Your goal is to produce a decision-grade insight report that provides clarity, ownership, risk awareness, and next steps — not just meeting notes.
 
 MEETING TITLE: ${meeting.title}${attendeesContext}
 
@@ -309,50 +369,49 @@ Format your response as JSON with this exact structure:
   }
 }`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert meeting analyst producing decision-grade insight reports. Extract actionable insights with precision. Be conservative with speaker attribution - only attribute when confident. Never invent information. Format decisions as objects with decision, owner, and context fields. Always respond with valid JSON.",
-        },
-        { role: "user", content: insightsPrompt },
-      ],
-      response_format: { type: "json_object" },
-    });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert meeting analyst producing decision-grade insight reports. Extract actionable insights with precision. Be conservative with speaker attribution - only attribute when confident. Never invent information. Format decisions as objects with decision, owner, and context fields. Always respond with valid JSON.",
+          },
+          { role: "user", content: insightsPrompt },
+        ],
+        response_format: { type: "json_object" },
+      });
 
-    const insightsText = completion.choices[0]?.message?.content || "{}";
-    let insights;
-    
-    try {
-      insights = JSON.parse(insightsText);
-      
-      // Normalize decisions to string format for backward compatibility
-      if (insights.decisions && Array.isArray(insights.decisions)) {
-        insights.decisions = insights.decisions.map((d: any) => {
-          if (typeof d === 'object' && d.decision) {
-            const owner = d.owner ? ` (${d.owner})` : '';
-            const context = d.context ? ` — ${d.context}` : '';
-            return `${d.decision}${owner}${context}`;
-          }
-          return d;
-        });
+      const insightsText = completion.choices[0]?.message?.content || "{}";
+
+      try {
+        insights = JSON.parse(insightsText);
+
+        if (insights.decisions && Array.isArray(insights.decisions)) {
+          insights.decisions = insights.decisions.map((d: any) => {
+            if (typeof d === 'object' && d.decision) {
+              const owner = d.owner ? ` (${d.owner})` : '';
+              const context = d.context ? ` — ${d.context}` : '';
+              return `${d.decision}${owner}${context}`;
+            }
+            return d;
+          });
+        }
+      } catch {
+        insights = {
+          summary_short: "Unable to generate summary",
+          summary_detailed: "",
+          strategic_insights: [],
+          speaker_highlights: [],
+          key_points: [],
+          action_items: [],
+          decisions: [],
+          risks: [],
+          open_questions: [],
+          follow_ups: [],
+          timeline_entries: [],
+          meeting_metrics: {},
+        };
       }
-    } catch {
-      insights = {
-        summary_short: "Unable to generate summary",
-        summary_detailed: "",
-        strategic_insights: [],
-        speaker_highlights: [],
-        key_points: [],
-        action_items: [],
-        decisions: [],
-        risks: [],
-        open_questions: [],
-        follow_ups: [],
-        timeline_entries: [],
-        meeting_metrics: {},
-      };
     }
 
     // Check if insights already exist for this meeting
@@ -363,7 +422,6 @@ Format your response as JSON with this exact structure:
       .single();
 
     if (!existingInsights) {
-      // Save insights only if they don't exist
       await supabase.from("meeting_insights").insert({
         meeting_id: meetingId,
         summary_short: insights.summary_short || "",
@@ -545,9 +603,10 @@ Format your response as JSON with this exact structure:
       JSON.stringify({
         success: true,
         meetingId,
-        hasTranscript: !!transcript,
-        hasInsights: true,
+        hasTranscript: !noUsableTranscript,
+        hasInsights: !noUsableTranscript,
         hasSpeakerSegments: speakerSegments.length > 0,
+        noAudioDetected: noUsableTranscript,
         slackSent,
         emailSent,
       }),

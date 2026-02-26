@@ -187,8 +187,17 @@ async function handleMessage(message, sender, sendResponse) {
       break;
     }
 
+    case 'MIC_PERMISSION_FAILED':
+      chrome.storage.local.set({ micPermissionGranted: false });
+      if (recordingState.tabId) {
+        chrome.tabs.sendMessage(recordingState.tabId, {
+          type: 'MIC_UNAVAILABLE',
+          error: message.error
+        }).catch(() => {});
+      }
+      break;
+
     case 'OFFSCREEN_HEARTBEAT':
-      // Receiving this message keeps the service worker alive
       break;
 
     case 'CLOSE_OFFSCREEN':

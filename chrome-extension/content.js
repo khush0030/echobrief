@@ -178,6 +178,65 @@ function hideStatus() {
   }
 }
 
+let micWarningBanner = null;
+
+function showMicWarningBanner() {
+  if (micWarningBanner) return;
+
+  micWarningBanner = document.createElement('div');
+  micWarningBanner.id = 'echobrief-mic-warning';
+  micWarningBanner.innerHTML = `
+    <style>
+      #echobrief-mic-warning {
+        position: fixed;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999998;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      .echobrief-mic-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 20px;
+        background: rgba(234, 179, 8, 0.95);
+        color: #1a1a1a;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 500;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        backdrop-filter: blur(8px);
+      }
+      .echobrief-mic-banner button {
+        background: rgba(0,0,0,0.15);
+        border: none;
+        color: #1a1a1a;
+        padding: 4px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .echobrief-mic-banner button:hover { background: rgba(0,0,0,0.25); }
+    </style>
+    <div class="echobrief-mic-banner">
+      <span>⚠️ Mic unavailable — recording tab audio only. Your voice won't be captured.</span>
+      <button id="echobrief-mic-dismiss">Dismiss</button>
+    </div>
+  `;
+
+  document.body.appendChild(micWarningBanner);
+
+  document.getElementById('echobrief-mic-dismiss')?.addEventListener('click', () => {
+    if (micWarningBanner) {
+      micWarningBanner.remove();
+      micWarningBanner = null;
+    }
+  });
+}
+
 // --- Recording state tracking ---
 
 let durationInterval = null;
@@ -185,10 +244,17 @@ let recordingStartTime = null;
 let stateCheckInterval = null;
 
 function startDurationTimer() {
+  // Clear any existing timer FIRST, then set the new start time
+  if (durationInterval) {
+    clearInterval(durationInterval);
+    durationInterval = null;
+  }
+  stopStateCheck();
+
   recordingStartTime = Date.now();
-  stopDurationTimer();
   
   durationInterval = setInterval(() => {
+    if (!recordingStartTime) return;
     const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
     updateStatus('recording', '', duration);
   }, 1000);
@@ -273,6 +339,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       cleanupRecordingUI();
       updateStatus('success', '✓ Sent for processing');
       setTimeout(hideStatus, 3000);
+      break;
+
+    case 'MIC_UNAVAILABLE':
+      showMicWarningBanner();
       break;
 
     case 'RECORDING_ERROR':

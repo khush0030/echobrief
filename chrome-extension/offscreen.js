@@ -67,7 +67,8 @@ async function startRecording({ streamId, meetingTitle, meetingUrl, authToken })
   let micStream = null;
   let audioContext = null;
 
-  // Try to also capture microphone so the user's own voice is in the recording
+  // Try to also capture microphone so the user's own voice is in the recording.
+  // Mic permission must have been granted from the popup first (visible UI context).
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -79,8 +80,10 @@ async function startRecording({ streamId, meetingTitle, meetingUrl, authToken })
     audioContext.createMediaStreamSource(tabStream).connect(dest);
     audioContext.createMediaStreamSource(micStream).connect(dest);
     recordingStream = dest.stream;
+    console.log('[EchoBrief] Microphone captured successfully — recording tab + mic audio');
   } catch (err) {
-    console.warn('Microphone not available, recording tab audio only:', err.message);
+    console.warn('[EchoBrief] Microphone NOT available, recording tab audio only:', err.name, err.message);
+    chrome.runtime.sendMessage({ type: 'MIC_PERMISSION_FAILED', error: err.name }).catch(() => {});
   }
 
   recorderState = {

@@ -76,7 +76,15 @@ function showRecordingStatus(container, status) {
   });
 }
 
-function showMeetingReadyStatus(container, tab) {
+async function showMeetingReadyStatus(container, tab) {
+  // Check if microphone permission has been set up
+  const { micPermissionGranted } = await chrome.storage.local.get('micPermissionGranted');
+  const micWarning = micPermissionGranted ? '' : `
+    <div class="mic-warning" style="background:#2a2000;border:1px solid #554400;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#ffcc00;">
+      ⚠️ Microphone not set up — <a href="#" id="setup-mic" style="color:#7c9cff;text-decoration:underline;cursor:pointer;">Set up now</a>
+    </div>
+  `;
+
   container.innerHTML = `
     <div class="status-card">
       <div class="status-header">
@@ -85,17 +93,34 @@ function showMeetingReadyStatus(container, tab) {
       </div>
       <div class="status-detail">
         Click below to start recording this meeting.
+        ${micWarning}
       </div>
     </div>
     <div class="actions">
       <button class="btn btn-primary" id="start-btn">Start Recording</button>
     </div>
   `;
+
+  // "Set up now" link opens the mic permission page
+  document.getElementById('setup-mic')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('mic-permission.html') });
+  });
   
   document.getElementById('start-btn').addEventListener('click', async () => {
     const btn = document.getElementById('start-btn');
     btn.disabled = true;
     btn.textContent = 'Starting...';
+
+    // Re-check mic permission — if still not granted, redirect to setup page
+    const { micPermissionGranted: micReady } = await chrome.storage.local.get('micPermissionGranted');
+    if (!micReady) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('mic-permission.html') });
+      btn.disabled = false;
+      btn.textContent = 'Start Recording';
+      return;
+    }
+
     try {
       const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
       await chrome.runtime.sendMessage({
