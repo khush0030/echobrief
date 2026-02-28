@@ -58,7 +58,6 @@ You can use any image editor or online tool to create these.
 - `tabCapture`: Capture tab audio
 - `storage`: Save auth token
 - `tabs`: Detect meeting URLs
-- `scripting`: Inject content scripts
 
 ## Troubleshooting
 
