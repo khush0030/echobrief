@@ -5,7 +5,8 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Supabase](https://img.shields.io/badge/Supabase-Backend-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com)
-[![OpenAI](https://img.shields.io/badge/OpenAI-Whisper%20%2B%20GPT-412991?logo=openai&logoColor=white)](https://openai.com)
+[![Sarvam AI](https://img.shields.io/badge/Sarvam-Saaras%20v3%20STT-000000?logo=data:image/svg+xml;base64,&logoColor=white)](https://sarvam.ai)
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white)](https://openai.com)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension%20MV3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 
@@ -32,7 +33,7 @@
 
 ## Overview
 
-EchoBrief solves the problem of meeting fatigue and lost context. Instead of scrambling to take notes, EchoBrief sits in the background, capturing audio from Google Meet or Zoom via a Chrome extension, transcribing it with OpenAI Whisper, and running it through a custom GPT-4o-mini pipeline that produces executive summaries, action items with ownership, risk flags, strategic insights, and timestamped timelines. Summaries are automatically delivered to Slack channels or email, and everything is searchable from a polished React dashboard.
+EchoBrief solves the problem of meeting fatigue and lost context. Instead of scrambling to take notes, EchoBrief sits in the background, capturing audio from Google Meet or Zoom via a Chrome extension, transcribing it with Sarvam AI's Saaras v3 model (with OpenAI Whisper as an automatic fallback), and running it through a custom GPT-4o-mini pipeline that produces executive summaries, action items with ownership, risk flags, strategic insights, and timestamped timelines. Summaries are automatically delivered to Slack channels or email, and everything is searchable from a polished React dashboard.
 
 ### What makes this different from Otter.ai / Fireflies?
 
@@ -47,7 +48,7 @@ EchoBrief solves the problem of meeting fatigue and lost context. Instead of scr
 | Category | Features |
 |---|---|
 | **Recording** | Chrome extension with auto-detection for Google Meet & Zoom, tab audio capture via Offscreen API, manual recording from web dashboard |
-| **AI Transcription** | OpenAI Whisper with word-level timestamps, speaker segmentation, verbose JSON output |
+| **AI Transcription** | Sarvam Saaras v3 (primary) with speaker diarization, translation, and timestamps; OpenAI Whisper as automatic fallback |
 | **AI Insights** | Executive summary, strategic insights, speaker-attributed highlights, prioritized action items (with owner, confidence, expected outcome), decisions & commitments, risks & blockers, chronological timeline |
 | **Meeting Metrics** | Engagement score, sentiment analysis, speaker participation breakdown |
 | **Integrations** | Google Calendar sync (OAuth 2.0 with token refresh), Slack delivery (channel selection), email summaries (Resend), Notion sync (OAuth) |
@@ -94,9 +95,11 @@ EchoBrief solves the problem of meeting fatigue and lost context. Instead of scr
 │                        EXTERNAL SERVICES                                │
 │                                                                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │ OpenAI       │  │ Google       │  │ Slack    │  │ Resend       │   │
-│  │ Whisper +    │  │ Calendar     │  │ API      │  │ (Email)      │   │
-│  │ GPT-4o-mini  │  │ OAuth 2.0   │  │          │  │              │   │
+│  │ Sarvam AI    │  │ Google       │  │ Slack    │  │ Resend       │   │
+│  │ Saaras v3    │  │ Calendar     │  │ API      │  │ (Email)      │   │
+│  │ (+ Whisper   │  │ OAuth 2.0   │  │          │  │              │   │
+│  │  fallback)   │  │              │  │          │  │              │   │
+│  │ GPT-4o-mini  │  │              │  │          │  │              │   │
 │  └──────────────┘  └──────────────┘  └──────────┘  └──────────────┘   │
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -132,8 +135,9 @@ EchoBrief solves the problem of meeting fatigue and lost context. Instead of scr
 ### AI / ML
 | Technology | Purpose |
 |---|---|
-| **OpenAI Whisper** | Audio transcription with word-level timestamps and segment data |
-| **GPT-4o-mini** | Meeting insight generation (structured JSON output) and speaker attribution |
+| **Sarvam Saaras v3** | Primary STT — async batch API with speaker diarization, Hindi/English translation, and timestamps. Processes via webhook callback. |
+| **OpenAI Whisper** | Fallback STT — used automatically if Sarvam submission fails or if a Sarvam job fails. Provides word-level timestamps and segment data. |
+| **GPT-4o-mini** | Meeting insight generation (structured JSON output). In the Whisper path, also handles speaker attribution against known attendees. |
 
 ### Integrations
 | Integration | Implementation |
@@ -160,11 +164,11 @@ EchoBrief solves the problem of meeting fatigue and lost context. Instead of scr
   │  RECORD  │ ──► │TRANSCRIBE│ ──► │ ANALYZE  │ ──► │ DELIVER  │
   └─────────┘      └──────────┘      └──────────┘      └──────────┘
 
-  Chrome ext        Whisper API       GPT-4o-mini       Slack / Email
-  detects Meet/     generates         produces           formatted
-  Zoom, captures    transcript        decision-grade     Block Kit
-  tab audio via     with word-level   insights as        messages or
-  MediaRecorder     timestamps        structured JSON    HTML emails
+  Chrome ext        Sarvam Saaras     GPT-4o-mini       Slack / Email
+  detects Meet/     v3 (async) with   produces           formatted
+  Zoom, captures    diarization &     decision-grade     Block Kit
+  tab audio via     translation       insights as        messages or
+  MediaRecorder     (Whisper fallback) structured JSON   HTML emails
 ```
 
 **Detailed flow:**
@@ -175,9 +179,9 @@ EchoBrief solves the problem of meeting fatigue and lost context. Instead of scr
 
 3. **Upload**. When recording stops, the audio (WebM) is uploaded to Supabase Storage via the `upload-recording` Edge Function, which creates a meeting record and triggers processing.
 
-4. **Transcription**. The `process-meeting` Edge Function downloads the audio, sends it to OpenAI Whisper (`whisper-1`) with `verbose_json` response format, yielding a full transcript with word-level timestamps and segments.
+4. **Transcription (Sarvam path — default)**. The `process-meeting` Edge Function downloads the audio and submits it to Sarvam's async Batch STT API (Saaras v3, `translate` mode, diarization enabled). The function saves the `sarvam_job_id` on the meeting and returns immediately. When Sarvam finishes processing, it calls the `sarvam-webhook` Edge Function with the results, including a diarized transcript with speaker labels (`SPEAKER_00`, `SPEAKER_01`, etc.) and timestamps.
 
-5. **Speaker Attribution**. If meeting attendees are known (via calendar sync), GPT-4o-mini analyzes transcript segments against the participant list to attribute speakers with confidence levels.
+5. **Transcription (Whisper fallback)**. If Sarvam API keys are not configured, if job submission fails, or if Sarvam reports a failed job, the system automatically falls back to OpenAI Whisper (`whisper-1`) with `verbose_json` response format. In this path, GPT-4o-mini performs speaker attribution by analyzing transcript segments against the known attendee list.
 
 6. **Insight Generation**. The speaker-labeled transcript is fed into a carefully engineered GPT-4o-mini prompt that produces a structured JSON report: executive summary, strategic insights, action items (with owner, priority, confidence, expected outcome), decisions, risks, timeline entries, and meeting metrics.
 
@@ -240,8 +244,9 @@ echobrief/
 │   ├── offscreen.html / offscreen.js# Offscreen document for MediaRecorder
 │   └── icons/                       # Extension icons (16, 48, 128px)
 ├── supabase/
-│   ├── functions/                   # 14 Deno Edge Functions
-│   │   ├── process-meeting/         # Core AI pipeline
+│   ├── functions/                   # 15 Deno Edge Functions
+│   │   ├── process-meeting/         # Core AI pipeline (Sarvam submit + Whisper fallback)
+│   │   ├── sarvam-webhook/          # Receives Sarvam async callback, processes results
 │   │   ├── upload-recording/        # Audio upload handler
 │   │   ├── google-oauth-start/      # OAuth initiation
 │   │   ├── google-oauth-callback/   # OAuth token exchange
@@ -255,8 +260,8 @@ echobrief/
 │   │   ├── send-slack-message/      # Slack Block Kit delivery
 │   │   ├── test-slack-connection/   # Slack health check
 │   │   ├── send-meeting-email/      # Email via Resend
-│   │   └── _shared/                 # CORS headers, rate limiting
-│   ├── migrations/                  # 15 SQL migrations
+│   │   └── _shared/                 # CORS, rate limiting, Sarvam helpers, insight generation
+│   ├── migrations/                  # 16 SQL migrations
 │   └── config.toml                  # Supabase project config
 ├── public/                          # Static assets (logo, favicon)
 ├── package.json
@@ -273,8 +278,8 @@ echobrief/
 ```sql
 -- Core tables
 profiles              -- User profiles, integration flags, preferences
-meetings              -- Meeting metadata (title, source, times, status, audio_url, attendees)
-transcripts           -- Full transcript, speaker segments, word-level timestamps
+meetings              -- Meeting metadata (title, source, times, status, audio_url, attendees, sarvam_job_id, processing_config)
+transcripts           -- Full transcript, speaker segments, word-level timestamps, stt_provider, language_detected
 meeting_insights      -- AI output (summary, action_items, decisions, risks, timeline, metrics)
 action_item_completions -- Tracks completed action items per user
 
@@ -315,7 +320,8 @@ All tables have **Row Level Security** enabled, restricting access so users can 
 | Function | Method | Description |
 |---|---|---|
 | `upload-recording` | POST | Validates auth, uploads audio to Storage, creates meeting record, returns meeting ID |
-| `process-meeting` | POST | Downloads audio → Whisper transcription → GPT-4o-mini speaker attribution → GPT-4o-mini insight generation → saves transcript + insights → triggers Slack/email delivery |
+| `process-meeting` | POST | Downloads audio → submits to Sarvam Batch API (async) → returns immediately. Falls back to Whisper → GPT-4o-mini speaker attribution → insight generation → Slack/email delivery if Sarvam is unavailable. |
+| `sarvam-webhook` | POST | Receives Sarvam async callback → validates auth token → downloads diarized transcript → runs GPT-4o-mini insight generation → saves transcript + insights → triggers Slack/email delivery. Falls back to Whisper on job failure. |
 | `google-oauth-start` | GET | Generates OAuth state, stores in DB, redirects to Google consent screen |
 | `google-oauth-callback` | GET | Exchanges auth code for tokens, stores encrypted tokens, redirects to app |
 | `google-oauth-redirect` | GET | Final redirect after OAuth completion |
@@ -404,6 +410,8 @@ For Edge Functions, create `supabase/.env.local`:
 
 ```env
 OPENAI_API_KEY=sk-...
+SARVAM_API_KEY=sk_...
+SARVAM_WEBHOOK_SECRET=your-generated-secret
 RESEND_API_KEY=re_...
 SLACK_BOT_TOKEN=xoxb-...
 GOOGLE_CLIENT_ID=...
@@ -443,7 +451,9 @@ npm run functions:serve
 | `VITE_SUPABASE_URL` | `.env` | Supabase project URL (frontend) |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `.env` | Supabase anon key (frontend) |
 | `VITE_SUPABASE_PROJECT_ID` | `.env` | Supabase project ID |
-| `OPENAI_API_KEY` | `supabase/.env.local` | Whisper transcription + GPT insights |
+| `OPENAI_API_KEY` | `supabase/.env.local` | GPT-4o-mini insights + Whisper fallback transcription |
+| `SARVAM_API_KEY` | `supabase/.env.local` | Sarvam Saaras v3 batch STT API key |
+| `SARVAM_WEBHOOK_SECRET` | `supabase/.env.local` | Shared secret for validating Sarvam webhook callbacks (you generate this) |
 | `RESEND_API_KEY` | `supabase/.env.local` | Email delivery |
 | `SLACK_BOT_TOKEN` | `supabase/.env.local` | Slack message posting |
 | `GOOGLE_CLIENT_ID` | `supabase/.env.local` | Google Calendar OAuth |
@@ -534,11 +544,24 @@ Building a Chrome extension that records live meetings surfaced several non-triv
 
 ### AI Pipeline Design
 
-The `process-meeting` Edge Function implements a multi-stage AI pipeline:
+The transcription pipeline uses a two-provider strategy with automatic failover:
 
-1. **Transcription**. Whisper API with `verbose_json` response format returns segment-level and word-level timestamps, enabling timeline reconstruction.
-2. **Speaker Attribution**. A separate GPT-4o-mini call analyzes transcript segments against known attendees, returning attributions with confidence levels (`high` / `medium` / `low`). Low-confidence attributions are discarded.
-3. **Insight Generation**. A carefully engineered system prompt instructs GPT-4o-mini to act as an "intelligent chief of staff," producing a structured JSON report with strict accuracy rules (no invented insights, no speculative ownership, prefer "Open Question" over guessing). The prompt enforces JSON schema compliance via `response_format: { type: "json_object" }`.
+**Sarvam path (default):**
+
+1. **Job Submission**. `process-meeting` submits the audio to Sarvam's async Batch STT API (Saaras v3, `translate` mode, `with_diarization: true`). A webhook callback URL and shared auth token are included. The function saves the `sarvam_job_id` and returns immediately.
+2. **Async Processing**. Sarvam processes the audio asynchronously. On completion, it POSTs to the `sarvam-webhook` Edge Function with the `X-SARVAM-JOB-CALLBACK-TOKEN` header for auth validation.
+3. **Diarized Transcript**. The webhook receives speaker-labeled segments (`SPEAKER_00`, `SPEAKER_01`, etc.) with precise timestamps. No additional GPT call is needed for speaker attribution.
+4. **Insight Generation**. The diarized transcript is fed into GPT-4o-mini with an engineered prompt that acts as an "intelligent chief of staff," producing a structured JSON report with strict accuracy rules. The prompt instructs the model to treat `SPEAKER_XX` labels as acoustically verified diarization and to map them to attendee names where context is clear.
+
+**Whisper fallback path:**
+
+If Sarvam keys are not configured, job submission fails, or a Sarvam job reports failure, the system seamlessly falls back to the original Whisper pipeline:
+
+1. **Transcription**. Whisper API with `verbose_json` response format returns segment-level and word-level timestamps.
+2. **Speaker Attribution**. A GPT-4o-mini call analyzes transcript segments against known attendees, returning attributions with confidence levels (`high` / `medium` / `low`). Low-confidence attributions are discarded.
+3. **Insight Generation**. Same GPT-4o-mini prompt as the Sarvam path.
+
+The `stt_provider` field on each transcript records which provider was used (`sarvam` or `whisper`).
 
 ### Real-Time Architecture
 

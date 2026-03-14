@@ -581,9 +581,30 @@ export default function MeetingDetail() {
                   <span className="text-xs font-semibold uppercase tracking-wider">Full Transcript</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-4">
-                  <p className="doc-content whitespace-pre-wrap text-muted-foreground">
-                    {transcript.content}
-                  </p>
+                  {speakerSegments.length > 0 ? (
+                    <div className="space-y-3">
+                      {speakerSegments.map((seg, i) => {
+                        const prevSpeaker = i > 0 ? speakerSegments[i - 1].speaker : null;
+                        const isNewSpeaker = seg.speaker !== prevSpeaker;
+                        return (
+                          <div key={i} className={cn(isNewSpeaker && i > 0 && "pt-2")}>
+                            {isNewSpeaker && (
+                              <span className="text-xs font-semibold text-accent uppercase tracking-wide">
+                                {seg.speaker}
+                              </span>
+                            )}
+                            <p className="doc-content text-muted-foreground mt-0.5">
+                              {seg.text}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="doc-content whitespace-pre-wrap text-muted-foreground">
+                      {transcript.content}
+                    </p>
+                  )}
                 </CollapsibleContent>
               </Collapsible>
             )}

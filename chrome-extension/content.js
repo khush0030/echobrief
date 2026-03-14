@@ -15,7 +15,7 @@ function createStatusIndicator() {
       #echobrief-status {
         position: fixed;
         top: 16px;
-        right: 16px;
+        left: 16px;
         z-index: 999999;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }

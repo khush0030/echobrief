@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chrome, CheckCircle2, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -10,6 +11,7 @@ interface ExtensionStatusProps {
 }
 
 export function ExtensionStatus({ className }: ExtensionStatusProps) {
+  const navigate = useNavigate();
   const [state, setState] = useState<ExtensionState>('checking');
   const [recordingInfo, setRecordingInfo] = useState<{
     title?: string;
@@ -133,7 +135,7 @@ export function ExtensionStatus({ className }: ExtensionStatusProps) {
               variant="outline" 
               size="sm" 
               className="mt-3 gap-2 h-8 text-xs"
-              onClick={() => window.open('/chrome-extension-guide', '_blank')}
+              onClick={() => navigate('/chrome-extension-guide')}
             >
               <Chrome className="w-3.5 h-3.5" />
               Installation Guide

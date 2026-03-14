@@ -39,5 +39,8 @@ verify_jwt = false
 [functions.upload-recording]
 verify_jwt = false
 
+[functions.sarvam-webhook]
+verify_jwt = false
+
 [functions.send-meeting-email]
 verify_jwt = false

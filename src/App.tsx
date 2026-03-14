@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import CalendarPage from "./pages/Calendar";
 import ActionItems from "./pages/ActionItems";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ChromeExtensionGuide from "./pages/ChromeExtensionGuide";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,6 +87,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ActionItems />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/chrome-extension-guide"
+          element={
+            <ProtectedRoute>
+              <ChromeExtensionGuide />
             </ProtectedRoute>
           }
         />
