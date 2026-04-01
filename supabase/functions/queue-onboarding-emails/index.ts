@@ -14,6 +14,19 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ANTI-SPAM: Check if user already has onboarding emails queued
+    const { data: existingEmails } = await supabase
+      .from("scheduled_emails")
+      .select("id")
+      .eq("user_id", user_id)
+      .eq("template", "welcome")
+      .limit(1);
+
+    if (existingEmails && existingEmails.length > 0) {
+      console.log(`Onboarding emails already queued for ${email}, skipping`);
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: "already_queued" }), { status: 200 });
+    }
+
     const now = new Date();
     const firstName = full_name?.split(" ")[0] || "there";
 

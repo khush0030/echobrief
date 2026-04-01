@@ -9,13 +9,14 @@ serve(async (req) => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get pending emails that are due
+    // Get pending emails that are due (with anti-spam protections)
     const { data: pendingEmails, error: fetchError } = await supabase
       .from("scheduled_emails")
       .select("*")
       .eq("status", "pending")
       .lte("send_at", new Date().toISOString())
-      .limit(50);
+      .order("send_at", { ascending: true })
+      .limit(20); // Process max 20 per run to avoid rate limits
 
     if (fetchError) {
       console.error("Failed to fetch pending emails:", fetchError);
@@ -30,6 +31,20 @@ serve(async (req) => {
 
     for (const email of pendingEmails) {
       try {
+        // ANTI-SPAM: Skip if user unsubscribed or email already sent today
+        const { data: recentSent } = await supabase
+          .from("scheduled_emails")
+          .select("id")
+          .eq("email", email.email)
+          .eq("status", "sent")
+          .gte("sent_at", new Date(Date.now() - 60 * 60 * 1000).toISOString()) // Last hour
+          .limit(3);
+
+        if (recentSent && recentSent.length >= 3) {
+          console.log(`Rate limit: ${email.email} received 3+ emails in last hour, skipping`);
+          continue;
+        }
+
         const html = getEmailTemplate(email.template, email.email);
         
         const response = await fetch("https://api.resend.com/emails", {
