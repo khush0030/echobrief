@@ -24,14 +24,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0C0A09] text-[#FAFAF9]">
+    <div className="min-h-screen bg-background page-gradient">
       <Sidebar onCollapsedChange={setSidebarCollapsed} />
       <div className={cn(
         "min-h-screen transition-all duration-200 relative z-10",
-        sidebarCollapsed ? "ml-14" : "ml-[220px]"
+        sidebarCollapsed ? "ml-14" : "ml-56"
       )}>
         <Header />
-        <main className="p-6">
+        <main>
           <PageTransition>
             {children}
           </PageTransition>

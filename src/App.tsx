@@ -13,7 +13,6 @@ import { PreMeetingNotification } from "@/components/dashboard/PreMeetingNotific
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
-import Onboarding from "./pages/Onboarding";
 import Recordings from "./pages/Recordings";
 import MeetingDetail from "./pages/MeetingDetail";
 import Settings from "./pages/Settings";
@@ -58,14 +57,6 @@ function AppRoutes() {
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route
-          path="/onboarding"
-          element={
-            <ProtectedRoute>
-              <Onboarding />
-            </ProtectedRoute>
-          }
-        />
         <Route
           path="/dashboard"
           element={

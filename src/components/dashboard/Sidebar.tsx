@@ -8,8 +8,7 @@ import {
   Settings, 
   LogOut,
   ChevronLeft,
-  Menu,
-  Search
+  Menu
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -47,42 +46,70 @@ export function Sidebar({ onCollapsedChange }: SidebarProps) {
   return (
     <aside 
       className={cn(
-        "fixed left-0 top-0 bottom-0 bg-[#0C0A09] border-r border-[#1C1917] flex flex-col transition-all duration-200 z-50",
-        collapsed ? "w-14" : "w-[220px]"
+        "fixed left-0 top-0 bottom-0 bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-200 z-50",
+        collapsed ? "w-14" : "w-56"
       )}
     >
       {/* Header with Logo */}
       <div className={cn(
-        "h-16 flex items-center border-b border-[#1C1917] px-4",
+        "h-14 flex items-center border-b border-sidebar-border px-3",
         collapsed ? "justify-center" : "justify-between"
       )}>
         {!collapsed && (
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center">
-              <span className="text-white font-bold">E</span>
-            </div>
-            <span className="text-lg font-bold text-[#FAFAF9]">EchoBrief</span>
+          <Link to="/dashboard" className="logo-container">
+            <img 
+              src={echoBriefLogo} 
+              alt="EchoBrief" 
+              className="w-7 h-7"
+              onError={(e) => {
+                console.error('Logo failed to load');
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+            <span className="text-sm font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              <span className="text-white">echo</span><span className="text-orange-400">brief</span>
+            </span>
           </Link>
         )}
         {collapsed && (
           <Link to="/dashboard">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-600 flex items-center justify-center">
-              <span className="text-white font-bold">E</span>
-            </div>
+            <img 
+              src={echoBriefLogo} 
+              alt="EchoBrief" 
+              className="w-7 h-7 rounded-lg"
+              onError={(e) => {
+                console.error('Logo failed to load');
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </Link>
         )}
         {!collapsed && (
           <button
             onClick={() => handleCollapsedChange(!collapsed)}
-            className="p-1 rounded-md hover:bg-[#1C1917] text-[#A8A29E] hover:text-white transition-colors"
+            className="p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-foreground transition-colors"
+            title="Collapse sidebar"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
         )}
       </div>
 
+      {/* Expand button when collapsed */}
+      {collapsed && (
+        <div className="p-2">
+          <button
+            onClick={() => handleCollapsedChange(false)}
+            className="w-full p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-foreground transition-colors flex items-center justify-center"
+            title="Expand sidebar"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -90,14 +117,13 @@ export function Sidebar({ onCollapsedChange }: SidebarProps) {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive 
-                  ? "bg-[#1C1917] text-[#FAFAF9]" 
-                  : "text-[#A8A29E] hover:bg-[#1C1917] hover:text-[#FAFAF9]",
+                "nav-item",
+                isActive && "active",
                 collapsed && "justify-center px-0"
               )}
+              title={collapsed ? item.label : undefined}
             >
-              <item.icon className="w-4 h-4" />
+              <item.icon className="w-4 h-4 flex-shrink-0" />
               {!collapsed && <span>{item.label}</span>}
             </Link>
           );
@@ -106,25 +132,28 @@ export function Sidebar({ onCollapsedChange }: SidebarProps) {
 
       {/* User Section */}
       <div className={cn(
-        "p-4 border-t border-[#1C1917]",
+        "p-2 border-t border-sidebar-border",
         collapsed && "flex flex-col items-center"
       )}>
         {!collapsed && (
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-500 to-amber-600 flex items-center justify-center text-white font-bold text-sm">
-              {user?.email?.[0].toUpperCase()}
+          <div className="flex items-center gap-2 px-2.5 py-1.5 mb-1">
+            <div className="w-6 h-6 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-medium text-accent">
+                {user?.email?.[0].toUpperCase()}
+              </span>
             </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-medium text-[#FAFAF9] truncate">{user?.email?.split('@')[0]}</p>
-            </div>
+            <span className="text-sm text-muted-foreground truncate flex-1">
+              {user?.email?.split('@')[0]}
+            </span>
           </div>
         )}
         <button
           onClick={signOut}
           className={cn(
-            "flex items-center gap-3 w-full px-3 py-2 text-sm text-[#A8A29E] hover:text-[#FAFAF9] hover:bg-[#1C1917] rounded-lg transition-colors",
+            "nav-item w-full text-muted-foreground hover:text-foreground",
             collapsed && "justify-center px-0"
           )}
+          title={collapsed ? "Sign out" : undefined}
         >
           <LogOut className="w-4 h-4" />
           {!collapsed && <span>Sign out</span>}
