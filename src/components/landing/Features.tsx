@@ -9,7 +9,7 @@ export function Features() {
         </svg>
       ),
       title: 'Auto-join and record',
-      description: 'Connect your calendar. EchoBrief's bot joins your meetings automatically — Google Meet, Zoom, or Teams. No extensions, no manual triggers.',
+      description: "Connect your calendar. EchoBrief's bot joins your meetings automatically — Google Meet, Zoom, or Teams. No extensions, no manual triggers.",
       color: 'rgba(249,115,22,0.1)',
     },
     {
@@ -71,7 +71,7 @@ export function Features() {
         </svg>
       ),
       title: 'Data stays in India',
-      description: 'Audio processed via Sarvam's sovereign Indian cloud. DPDP Act compliant. Your meeting data never leaves the country.',
+      description: "Audio processed via Sarvam's sovereign Indian cloud. DPDP Act compliant. Your meeting data never leaves the country.",
       color: 'rgba(34,197,94,0.1)',
     },
   ];
