@@ -85,7 +85,7 @@ export default function ChromeExtensionGuide() {
               </li>
             </ol>
             <p className="text-xs text-muted-foreground">
-              Make sure your app URL (<code className="rounded bg-muted px-1.5 py-0.5">echobrief-ten.vercel.app</code> or <code className="rounded bg-muted px-1.5 py-0.5">localhost:8080</code>) is open so the extension can sync.
+              Make sure your app URL (<code className="rounded bg-muted px-1.5 py-0.5">echobrief.in</code> or <code className="rounded bg-muted px-1.5 py-0.5">localhost:8080</code>) is open so the extension can sync.
             </p>
           </div>
           )}

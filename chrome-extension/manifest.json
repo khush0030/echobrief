@@ -23,7 +23,7 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://echobrief-ten.vercel.app/*"],
+      "matches": ["https://echobrief.in/*"],
       "js": ["web-bridge.js"],
       "run_at": "document_idle"
     }

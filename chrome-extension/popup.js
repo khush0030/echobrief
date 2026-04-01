@@ -1,5 +1,5 @@
 // EchoBrief Popup Script
-const ECHOBRIEF_URL = 'https://echobrief-ten.vercel.app';
+const ECHOBRIEF_URL = 'https://echobrief.in';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const contentEl = document.getElementById('content');

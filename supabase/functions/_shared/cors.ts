@@ -2,8 +2,7 @@
 // Only allows requests from the production app and local development
 
 const ALLOWED_ORIGINS = [
-  "https://echobrief-ai.vercel.app",
-  "https://echobrief-ten.vercel.app",
+  "https://echobrief.in",
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:8080",
