@@ -42,8 +42,25 @@ export function RecordingButton({
   const [isStarting, setIsStarting] = useState(false);
   const [recordingMode, setRecordingMode] = useState<'browser' | 'bot'>('browser');
   const [meetingUrl, setMeetingUrl] = useState(propMeetingLink || '');
+  const [notetakerName, setNotetakerName] = useState('EchoBrief Notetaker');
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Fetch notetaker name from user preferences
+  useEffect(() => {
+    if (!user) return;
+    const fetchPrefs = async () => {
+      const { data } = await supabase
+        .from('notification_preferences')
+        .select('notetaker_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (data?.notetaker_name) {
+        setNotetakerName(data.notetaker_name);
+      }
+    };
+    fetchPrefs();
+  }, [user]);
 
   const {
     isRecording,
@@ -73,7 +90,7 @@ export function RecordingButton({
         }
         
         const { data, error: botError } = await supabase.functions.invoke('start-bot', {
-          body: { meeting_url: meetingUrl, bot_name: 'EchoBrief Bot', language: 'en' }
+          body: { meeting_url: meetingUrl, bot_name: notetakerName, language: 'en' }
         });
 
         if (botError) throw botError;
