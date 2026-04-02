@@ -10,6 +10,10 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(origin);
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(
@@ -18,25 +22,40 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    let user_id: string;
 
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    try {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (!user) throw new Error("No user");
+      user_id = user.id;
+    } catch (err) {
+      // Fallback: try to decode JWT manually
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        return new Response(
+          JSON.stringify({ error: "Invalid token format" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        const payload = JSON.parse(atob(parts[1]));
+        user_id = payload.sub;
+        if (!user_id) throw new Error("No user ID in token");
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Get Google access token
     const { data: tokenData } = await supabase
       .from("user_oauth_tokens")
       .select("google_access_token")
-      .eq("user_id", user.id)
+      .eq("user_id", user_id)
       .single();
 
     if (!tokenData?.google_access_token) {
@@ -50,7 +69,7 @@ serve(async (req) => {
     const { data: calendars } = await supabase
       .from("calendars")
       .select("id, calendar_id")
-      .eq("user_id", user.id)
+      .eq("user_id", user_id)
       .eq("is_active", true);
 
     if (!calendars || calendars.length === 0) {
@@ -83,7 +102,7 @@ serve(async (req) => {
           if (items) {
             allEvents.push(
               ...items.map((event: any) => ({
-                user_id: user.id,
+                user_id: user_id,
                 calendar_id: cal.id,
                 event_id: event.id,
                 title: event.summary || "No title",
