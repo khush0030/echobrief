@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, Plus, Loader2, ExternalLink } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Calendar as CalendarIcon, RefreshCw, ChevronDown, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import { useCalendar } from '@/contexts/CalendarContext';
+import { format, isToday, isTomorrow, parseISO, startOfDay, isSameDay } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
 interface CalendarEvent {
@@ -14,57 +14,40 @@ interface CalendarEvent {
   title: string;
   start_time: string;
   end_time: string;
-  location?: string;
-  meeting_link?: string;
-  organizer_name?: string;
+  is_all_day: boolean;
 }
 
 export default function Calendar() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { events, setEvents, synced, setSynced, lastSyncTime, setLastSyncTime } = useCalendar();
   const { toast } = useToast();
 
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<{ count: number; visible: boolean }>({ count: 0, visible: false });
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
 
-  // Fetch events from Supabase
-  useEffect(() => {
-    if (!user) return;
+  // Group events by date
+  const groupedEvents = {
+    today: events.filter(e => isToday(parseISO(e.start_time))).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    tomorrow: events.filter(e => isTomorrow(parseISO(e.start_time))).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    upcoming: events.filter(e => {
+      const eventDate = parseISO(e.start_time);
+      return !isToday(eventDate) && !isTomorrow(eventDate);
+    }).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+  };
 
-    const fetchEvents = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('calendar_events')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('start_time', new Date().toISOString())
-          .order('start_time', { ascending: true })
-          .limit(50);
+  const upcomingByDate = groupedEvents.upcoming.reduce((acc, event) => {
+    const dateKey = format(parseISO(event.start_time), 'yyyy-MM-dd');
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(event);
+    return acc;
+  }, {} as Record<string, CalendarEvent[]>);
 
-        if (error) {
-          console.error('Error fetching events:', error);
-          setEvents([]);
-        } else {
-          setEvents(data || []);
-        }
-      } catch (err) {
-        console.error('Unexpected error:', err);
-        setEvents([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, [user]);
-
-  const handleManualSync = async () => {
+  const handleSync = async () => {
     setSyncing(true);
     try {
       if (!user) throw new Error('Not logged in');
 
-      // Get Google access token
       const { data: tokenData } = await supabase
         .from('user_oauth_tokens')
         .select('google_access_token')
@@ -75,7 +58,6 @@ export default function Calendar() {
         throw new Error('Google Calendar not connected');
       }
 
-      // Get user's calendars
       const { data: calendars } = await supabase
         .from('calendars')
         .select('id, calendar_id')
@@ -85,38 +67,45 @@ export default function Calendar() {
       if (!calendars || calendars.length === 0) {
         setEvents([]);
         toast({ title: 'Info', description: 'No calendars connected' });
+        setSyncing(false);
         return;
       }
 
       const now = new Date();
       const maxDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const allEvents: any[] = [];
+      const allEvents: CalendarEvent[] = [];
 
-      // Fetch from each calendar
       for (const cal of calendars) {
-        const response = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendar_id)}/events?timeMin=${now.toISOString()}&timeMax=${maxDate.toISOString()}&singleEvents=true&orderBy=startTime`,
-          {
-            headers: { 'Authorization': `Bearer ${tokenData.google_access_token}` },
-          }
-        );
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendar_id)}/events?timeMin=${now.toISOString()}&timeMax=${maxDate.toISOString()}&singleEvents=true&orderBy=startTime`,
+            { headers: { 'Authorization': `Bearer ${tokenData.google_access_token}` } }
+          );
 
-        if (response.ok) {
-          const { items } = await response.json();
-          if (items) {
-            allEvents.push(...items.map((e: any) => ({
-              id: e.id,
-              title: e.summary || 'No title',
-              start_time: e.start?.dateTime || e.start?.date,
-              end_time: e.end?.dateTime || e.end?.date,
-              is_all_day: !e.start?.dateTime,
-            })));
+          if (response.ok) {
+            const { items } = await response.json();
+            if (items) {
+              allEvents.push(...items.map((e: any) => ({
+                id: e.id,
+                title: e.summary || 'No title',
+                start_time: e.start?.dateTime || e.start?.date,
+                end_time: e.end?.dateTime || e.end?.date,
+                is_all_day: !e.start?.dateTime,
+              })));
+            }
           }
+        } catch (err) {
+          console.error('Fetch error:', err);
         }
       }
 
-      toast({ title: 'Synced!', description: `${allEvents.length} events found` });
       setEvents(allEvents);
+      setSynced(true);
+      setLastSyncTime(new Date());
+
+      // Show sync message
+      setSyncMessage({ count: allEvents.length, visible: true });
+      setTimeout(() => setSyncMessage(prev => ({ ...prev, visible: false })), 3000);
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Failed to sync', variant: 'destructive' });
     } finally {
@@ -124,57 +113,105 @@ export default function Calendar() {
     }
   };
 
-  const getEventBadgeColor = (startTime: string) => {
-    const eventDate = parseISO(startTime);
-    if (isToday(eventDate)) return 'bg-orange-500/20 text-orange-400';
-    if (isTomorrow(eventDate)) return 'bg-blue-500/20 text-blue-400';
-    return 'bg-gray-500/20 text-gray-400';
-  };
+  const EventCard = ({ event }: { event: CalendarEvent }) => {
+    const isEventToday = isToday(parseISO(event.start_time));
+    const borderColor = isEventToday ? '#F97316' : '#78716C';
 
-  const getEventBadgeLabel = (startTime: string) => {
-    const eventDate = parseISO(startTime);
-    if (isToday(eventDate)) return 'Today';
-    if (isTomorrow(eventDate)) return 'Tomorrow';
-    return format(eventDate, 'MMM d');
-  };
-
-  if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto mb-4" />
-            <p style={{ color: '#A8A29E' }}>Loading calendar events...</p>
-          </div>
+      <div
+        style={{
+          background: '#1C1917',
+          border: '1px solid #292524',
+          borderRadius: 12,
+          padding: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderLeft: `3px solid ${borderColor}`,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = '#404040';
+          e.currentTarget.style.background = '#292524';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = '#292524';
+          e.currentTarget.style.background = '#1C1917';
+        }}
+      >
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: '#FAFAF9', margin: 0, marginBottom: 8, fontFamily: 'Outfit, sans-serif' }}>
+            {event.title}
+          </h3>
+          <p style={{ fontSize: 13, color: '#A8A29E', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+            {!event.is_all_day ? (
+              `${format(parseISO(event.start_time), 'h:mm a')} – ${format(parseISO(event.end_time), 'h:mm a')}`
+            ) : (
+              'All day'
+            )}
+          </p>
         </div>
-      </DashboardLayout>
+        <ChevronRight size={20} style={{ color: '#78716C' }} />
+      </div>
     );
-  }
+  };
+
+  const SectionHeader = ({ label, color }: { label: string; color: string }) => (
+    <h2
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color,
+        marginBottom: 16,
+        marginTop: 24,
+      }}
+    >
+      {label}
+    </h2>
+  );
 
   return (
     <DashboardLayout>
-      <div className="px-8 py-8 max-w-4xl">
+      <div style={{ padding: '32px', maxWidth: '56rem' }}>
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
-            <h1 className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 30, fontWeight: 'bold', color: '#FAFAF9', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
               Calendar
             </h1>
-            <p className="text-sm mt-2" style={{ color: '#A8A29E' }}>
+            <p style={{ fontSize: 14, color: '#A8A29E', marginTop: 8, margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
               Your upcoming meetings
             </p>
           </div>
-          <Button
-            onClick={handleManualSync}
-            disabled={syncing}
-            style={{ background: '#FB923C', color: 'white' }}
-          >
-            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            Refresh
-          </Button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {syncMessage.visible && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#22c55e', fontSize: 13 }}>
+                <CheckCircle2 size={16} />
+                <span>Synced · {syncMessage.count} events</span>
+              </div>
+            )}
+            <Button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{
+                background: syncing ? '#9d6b3c' : '#FB923C',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+              Sync Now
+            </Button>
+          </div>
         </div>
 
-        {/* No Events State */}
+        {/* Events or Empty State */}
         {events.length === 0 ? (
           <div
             style={{
@@ -185,7 +222,7 @@ export default function Calendar() {
               textAlign: 'center',
             }}
           >
-            <CalendarIcon className="w-12 h-12 mx-auto mb-4" style={{ color: '#78716C' }} />
+            <CalendarIcon style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#78716C' }} />
             <h3 style={{ fontSize: 16, fontWeight: 600, color: '#FAFAF9', marginBottom: 8 }}>
               No upcoming meetings
             </h3>
@@ -193,95 +230,95 @@ export default function Calendar() {
               Connect your Google Calendar in Settings to see your upcoming meetings here.
             </p>
             <Button
-              onClick={() => navigate('/settings?tab=integrations')}
+              onClick={() => window.location.href = '/settings?tab=integrations'}
               style={{ background: '#FB923C', color: 'white' }}
             >
               Go to Settings
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {events.map((event) => (
-              <div
-                key={event.id}
-                style={{
-                  background: '#1C1917',
-                  border: '1px solid #292524',
-                  borderRadius: 12,
-                  padding: 16,
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onClick={() => navigate(`/meeting/${event.id}`)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#404040';
-                  e.currentTarget.style.background = '#252422';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#292524';
-                  e.currentTarget.style.background = '#1C1917';
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  {/* Title & Badge */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: '#FAFAF9', margin: 0 }}>
-                      {event.title}
-                    </h3>
-                    <Badge className={getEventBadgeColor(event.start_time)}>
-                      {getEventBadgeLabel(event.start_time)}
-                    </Badge>
-                  </div>
-
-                  {/* Time */}
-                  <p style={{ fontSize: 12, color: '#A8A29E', margin: 0, marginBottom: 8 }}>
-                    {format(parseISO(event.start_time), 'h:mm a')} – {format(parseISO(event.end_time), 'h:mm a')}
-                  </p>
-
-                  {/* Details */}
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    {event.organizer_name && (
-                      <p style={{ fontSize: 12, color: '#78716C', margin: 0 }}>
-                        👤 {event.organizer_name}
-                      </p>
-                    )}
-                    {event.location && (
-                      <p style={{ fontSize: 12, color: '#78716C', margin: 0 }}>
-                        📍 {event.location}
-                      </p>
-                    )}
-                    {event.meeting_link && (
-                      <a
-                        href={event.meeting_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          fontSize: 12,
-                          color: '#FB923C',
-                          textDecoration: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        🔗 Join meeting <ExternalLink size={10} style={{ marginLeft: 2 }} />
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {/* Arrow */}
-                <div style={{ marginLeft: 16, paddingTop: 4, color: '#78716C' }}>
-                  →
-                </div>
+          <div>
+            {/* TODAY */}
+            <SectionHeader label={`Today · ${format(new Date(), 'EEEE, MMMM d')}`} color="#FB923C" />
+            {groupedEvents.today.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+                {groupedEvents.today.map(event => (
+                  <EventCard key={event.id} event={event} />
+                ))}
               </div>
-            ))}
+            ) : (
+              <p style={{ color: '#78716C', fontSize: 13, marginBottom: 24 }}>No meetings scheduled for today</p>
+            )}
+
+            {/* TOMORROW */}
+            <SectionHeader label={`Tomorrow · ${format(new Date(Date.now() + 86400000), 'EEEE, MMMM d')}`} color="#78716C" />
+            {groupedEvents.tomorrow.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+                {groupedEvents.tomorrow.map(event => (
+                  <EventCard key={event.id} event={event} />
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: '#78716C', fontSize: 13, marginBottom: 24 }}>No meetings scheduled for tomorrow</p>
+            )}
+
+            {/* UPCOMING */}
+            {Object.keys(upcomingByDate).length > 0 && (
+              <div>
+                <button
+                  onClick={() => setUpcomingExpanded(!upcomingExpanded)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 0,
+                    marginTop: 24,
+                    marginBottom: 16,
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A8A29E' }}>
+                    Upcoming
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      color: '#78716C',
+                      transform: upcomingExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      transition: 'transform 0.2s',
+                    }}
+                  />
+                </button>
+
+                {upcomingExpanded && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    {Object.entries(upcomingByDate).map(([dateKey, dateEvents]) => (
+                      <div key={dateKey}>
+                        <h4 style={{ fontSize: 12, color: '#78716C', marginBottom: 12, margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+                          {format(parseISO(dateKey), 'EEEE, MMMM d')}
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {dateEvents.map(event => (
+                            <EventCard key={event.id} event={event} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
+
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     </DashboardLayout>
   );

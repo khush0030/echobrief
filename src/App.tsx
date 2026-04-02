@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RecordingProvider } from "@/contexts/RecordingContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { CalendarProvider } from "@/contexts/CalendarContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ExtensionTokenSync } from "@/components/ExtensionTokenSync";
 import { GlobalRecordingPanel } from "@/components/dashboard/GlobalRecordingPanel";
@@ -146,7 +147,9 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <RecordingProvider>
-              <AppRoutes />
+              <CalendarProvider>
+                <AppRoutes />
+              </CalendarProvider>
             </RecordingProvider>
           </AuthProvider>
         </BrowserRouter>
