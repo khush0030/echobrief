@@ -12,6 +12,7 @@ interface CalendarEvent {
   is_all_day: boolean;
   meetingUrl?: string;
   hasMeetingLink?: boolean;
+  attendees?: Array<{ email: string; displayName?: string; responseStatus?: string; organizer?: boolean }>;
 }
 
 interface MeetingDetailModalProps {
@@ -23,6 +24,7 @@ interface MeetingDetailModalProps {
 export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingDetailModalProps) {
   const { toast } = useToast();
   const [botStatus, setBotStatus] = useState<'idle' | 'loading' | 'joined' | 'error'>('idle');
+  const [botError, setBotError] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -69,14 +71,18 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
   const handleSendBot = async () => {
     if (!event.hasMeetingLink || !event.meetingUrl) return;
     setBotStatus('loading');
+    setBotError('');
     try {
       await onRecordWithBot(event);
       setBotStatus('joined');
     } catch (err: any) {
+      console.error('[SendBot] Error:', err);
+      const errorMsg = err?.message || JSON.stringify(err) || 'Unknown error';
+      setBotError(errorMsg);
       setBotStatus('error');
       toast({
         title: 'Error',
-        description: err?.message || 'Failed to send bot',
+        description: errorMsg,
         variant: 'destructive',
       });
     }
@@ -220,7 +226,71 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#78716C', marginBottom: 12 }}>
             Attendees
           </div>
-          <p style={{ fontSize: 13, color: '#78716C', margin: 0 }}>No attendee info available</p>
+          {event.attendees && event.attendees.length > 0 ? (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {event.attendees.slice(0, 6).map((attendee, idx) => {
+                const initials = (attendee.displayName || attendee.email)
+                  .split(' ')
+                  .map(n => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2);
+                
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #F97316, #F59E0B)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: 11,
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {initials}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 12, color: '#D4D4D4', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+                        {attendee.displayName || attendee.email.split('@')[0]}
+                      </p>
+                      <p style={{ fontSize: 11, color: '#78716C', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+                        {attendee.responseStatus || 'no response'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              {event.attendees.length > 6 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px 12px',
+                    background: '#44403C',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: '#D4D4D4',
+                  }}
+                >
+                  +{event.attendees.length - 6} more
+                </div>
+              )}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: '#78716C', margin: 0 }}>No attendee info available</p>
+          )}
         </div>
 
         {/* Divider */}
@@ -334,9 +404,16 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
               )}
 
               {botStatus === 'error' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#EF4444', fontSize: 12 }}>
-                  <AlertCircle size={14} />
-                  Failed to send bot
+                <div style={{ color: '#EF4444', fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertCircle size={14} />
+                    Failed to send bot
+                  </div>
+                  {botError && (
+                    <div style={{ color: '#A8A29E', fontSize: 11, marginTop: 6, wordBreak: 'break-word', fontFamily: 'DM Sans, monospace' }}>
+                      {botError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -50,12 +50,13 @@ serve(async (req) => {
     });
 
     if (!recallResponse.ok) {
-      const error = await recallResponse.text();
-      console.error('Recall API error:', error);
-      throw new Error(`Recall API error: ${recallResponse.status}`);
+      const recallBody = await recallResponse.text();
+      console.error('[start-recall-recording] Recall API error:', recallResponse.status, recallBody);
+      throw new Error(`Recall API ${recallResponse.status}: ${recallBody}`);
     }
 
     const botData = await recallResponse.json();
+    console.log('[start-recall-recording] Bot created:', botData.id);
 
     // Determine platform
     let platform = 'unknown';

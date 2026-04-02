@@ -50,6 +50,7 @@ interface CalendarEvent {
   is_all_day: boolean;
   meetingUrl?: string;
   hasMeetingLink?: boolean;
+  attendees?: Array<{ email: string; displayName?: string; responseStatus?: string; organizer?: boolean }>;
 }
 
 export default function Calendar() {
@@ -112,6 +113,7 @@ export default function Calendar() {
                     is_all_day: !e.start?.dateTime,
                     meetingUrl,
                     hasMeetingLink: !!meetingUrl,
+                    attendees: e.attendees || [],
                   };
                 }));
               }
