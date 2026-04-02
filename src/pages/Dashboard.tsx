@@ -6,7 +6,7 @@ import { DigestSettings } from '@/components/dashboard/DigestSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Meeting } from '@/types/meeting';
-import { Clock, ChevronRight, Mic, Users, CheckCircle2, Globe, Bot, FileText, Chrome, Zap } from 'lucide-react';
+import { Clock, ChevronRight, Mic, Users, CheckCircle2, Globe, Bot, FileText, Chrome, Zap, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { T } from '@/lib/theme';
@@ -240,18 +240,38 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 32px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 40px' }}>
+        {/* Welcome message */}
+        <p style={{
+          fontFamily: 'DM Sans, sans-serif',
+          fontSize: 14,
+          color: '#78716C',
+          margin: '0 0 24px 0',
+          fontWeight: 400,
+        }}>
+          Welcome back, {user?.email?.split('@')[0] || 'User'}
+        </p>
+
+        {/* Header — Meetings title + Record button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
             <h1 style={{
-              fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 600,
-              color: T.text, marginBottom: 4, letterSpacing: '-0.02em',
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: 32,
+              fontWeight: 600,
+              color: '#FAFAF9',
+              margin: 0,
+              letterSpacing: '-0.02em',
             }}>
-              Your Meetings
+              Meetings
             </h1>
-            <p style={{ color: T.textS, fontSize: 14 }}>
-              {meetings.length} meetings · {Object.keys(insightCounts).length} summaries generated
+            <p style={{
+              fontFamily: 'DM Sans, sans-serif',
+              fontSize: 13,
+              color: '#78716C',
+              margin: '4px 0 0 0',
+            }}>
+              Your meeting intelligence hub
             </p>
           </div>
           <RecordingButton 
@@ -262,81 +282,156 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Digest Settings & Send Button */}
-        {meetings.length > 0 && (
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-              <button
-                onClick={handleSendDigest}
-                disabled={digestSending}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: '#FB923C',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  opacity: digestSending ? 0.6 : 1,
-                }}
-              >
-                {digestSending ? '⏳ Sending...' : '📊 Send Digest Now'}
-              </button>
-              <button
-                onClick={() => setShowDigestSettings(!showDigestSettings)}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: 8,
-                  border: '1px solid #292524',
-                  background: 'transparent',
-                  color: '#A8A29E',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                }}
-              >
-                ⚙️ Settings
-              </button>
-            </div>
-            {showDigestSettings && user && (
-              <DigestSettings user_id={user.id} onSave={() => setShowDigestSettings(false)} />
-            )}
-          </div>
-        )}
-
-        {/* Quick Stats — 4 column grid, icon top-left, big number, label below (prototype exact) */}
+        {/* Stats Row — 3 columns */}
         {!loading && meetings.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
-            {[
-              { label: 'Total Meetings', value: stats.totalMeetings.toString(), sub: 'All time', icon: <Mic size={18} color={T.orangeL} /> },
-              { label: 'Action Items', value: stats.transcriptCount.toString(), sub: `${stats.completedCount} completed`, icon: <CheckCircle2 size={18} color={T.green} /> },
-              { label: 'Languages Used', value: stats.languageCount.toString(), sub: 'Auto-detected', icon: <Globe size={18} color={T.purple} /> },
-              { label: 'Active Bots', value: meetings.filter(m => m.status === 'recording').length.toString(), sub: meetings.filter(m => m.status === 'recording').length > 0 ? 'Recording now' : 'Idle', icon: <Bot size={18} color={T.blue} /> },
-            ].map((stat, i) => (
-              <div
-                key={i}
-                style={{
-                  background: T.bgCard, border: `1px solid ${T.border}`,
-                  borderRadius: 16, padding: 18, transition: 'all 0.2s',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  {stat.icon}
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+              {/* Meetings Count */}
+              <div style={{
+                background: '#1C1917',
+                border: '1px solid #292524',
+                borderRadius: 14,
+                padding: 24,
+              }}>
+                <div style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 32,
+                  fontWeight: 700,
+                  color: '#FAFAF9',
+                  margin: 0,
+                }}>
+                  {meetings.length}
                 </div>
                 <div style={{
-                  fontFamily: 'Outfit, sans-serif', fontSize: 26, fontWeight: 700,
-                  color: T.text, marginBottom: 2,
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  color: '#78716C',
+                  margin: '4px 0 0 0',
                 }}>
-                  {stat.value}
+                  Meetings
                 </div>
-                <div style={{ color: T.textM, fontSize: 12 }}>{stat.label}</div>
-                <div style={{ color: T.textS, fontSize: 11, marginTop: 2 }}>{stat.sub}</div>
               </div>
-            ))}
-          </div>
+
+              {/* Recorded Time */}
+              <div style={{
+                background: '#1C1917',
+                border: '1px solid #292524',
+                borderRadius: 14,
+                padding: 24,
+              }}>
+                <div style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 32,
+                  fontWeight: 700,
+                  color: '#FAFAF9',
+                  margin: 0,
+                }}>
+                  {(() => {
+                    const totalSecs = meetings.reduce((acc, m) => acc + (m.duration_seconds || 0), 0);
+                    const hours = Math.floor(totalSecs / 3600);
+                    const mins = Math.floor((totalSecs % 3600) / 60);
+                    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                  })()}
+                </div>
+                <div style={{
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  color: '#78716C',
+                  margin: '4px 0 0 0',
+                }}>
+                  Recorded
+                </div>
+              </div>
+
+              {/* Summaries Count */}
+              <div style={{
+                background: '#1C1917',
+                border: '1px solid #292524',
+                borderRadius: 14,
+                padding: 24,
+              }}>
+                <div style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 32,
+                  fontWeight: 700,
+                  color: '#FAFAF9',
+                  margin: 0,
+                }}>
+                  {meetings.filter(m => m.summary).length}
+                </div>
+                <div style={{
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  color: '#78716C',
+                  margin: '4px 0 0 0',
+                }}>
+                  Summaries
+                </div>
+              </div>
+            </div>
+
+            {/* Time Saved Banner */}
+            <div style={{
+              background: 'rgba(34, 197, 94, 0.06)',
+              border: '1px solid rgba(34, 197, 94, 0.12)',
+              borderRadius: 12,
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              marginBottom: 32,
+            }}>
+              <div style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: 'rgba(34, 197, 94, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Sparkles size={20} color="#22C55E" style={{ flexShrink: 0 }} />
+              </div>
+              <div>
+                <div style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#FAFAF9',
+                  margin: 0,
+                }}>
+                  ~{(() => {
+                    const totalSecs = meetings.reduce((acc, m) => acc + (m.duration_seconds || 0), 0);
+                    const totalMins = Math.round(totalSecs / 60);
+                    const saved = Math.round(totalMins * 0.25);
+                    const hours = Math.floor(saved / 60);
+                    const mins = saved % 60;
+                    return hours > 0 ? `${hours}h ${mins}m saved` : `${mins}m saved`;
+                  })()}
+                </div>
+                <div style={{
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  color: '#78716C',
+                  margin: '2px 0 0 0',
+                }}>
+                  Time saved on meeting summaries with AI
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Meetings Label */}
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: '#78716C',
+              marginBottom: 16,
+            }}>
+              Recent Meetings
+            </div>
+          </>
         )}
 
         {/* Meeting cards */}
