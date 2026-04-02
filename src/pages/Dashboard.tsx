@@ -340,7 +340,23 @@ export default function Dashboard() {
         )}
 
         {/* Meeting cards */}
-        {meetings.length === 0 && !loading ? (
+        {loading ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            minHeight: 300, gap: 16
+          }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              border: '2px solid #292524',
+              borderTopColor: '#F97316',
+              animation: 'spin 0.8s linear infinite'
+            }} />
+            <p style={{ color: '#78716C', fontSize: 13, fontFamily: 'DM Sans, sans-serif' }}>
+              Loading meetings...
+            </p>
+          </div>
+        ) : meetings.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 0' }}>
             <Mic style={{ width: 48, height: 48, margin: '0 auto 16px', color: T.textM }} />
             <p style={{ fontSize: 16, fontWeight: 500, color: T.text, marginBottom: 4 }}>No meetings yet</p>
