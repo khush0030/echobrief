@@ -217,12 +217,12 @@ vercel deploy --prod
 
 ### Supabase Edge Functions
 ```bash
-supabase functions deploy start-recall-recording --project-ref lekkpfpojlspbuwrtmzt
-supabase functions deploy recall-webhook --project-ref lekkpfpojlspbuwrtmzt
-supabase functions deploy generate-meeting-summary --project-ref lekkpfpojlspbuwrtmzt
-supabase functions deploy send-meeting-summary-email --project-ref lekkpfpojlspbuwrtmzt
-supabase functions deploy sync-calendar-events --project-ref lekkpfpojlspbuwrtmzt
-supabase functions deploy google-oauth-redirect --project-ref lekkpfpojlspbuwrtmzt
+supabase functions deploy start-recall-recording --project-ref <PROJECT_ID>
+supabase functions deploy recall-webhook --project-ref <PROJECT_ID>
+supabase functions deploy generate-meeting-summary --project-ref <PROJECT_ID>
+supabase functions deploy send-meeting-summary-email --project-ref <PROJECT_ID>
+supabase functions deploy sync-calendar-events --project-ref <PROJECT_ID>
+supabase functions deploy google-oauth-redirect --project-ref <PROJECT_ID>
 ```
 
 ---
@@ -231,30 +231,35 @@ supabase functions deploy google-oauth-redirect --project-ref lekkpfpojlspbuwrtm
 
 ### Frontend (.env.local)
 ```bash
-VITE_SUPABASE_URL=https://lekkpfpojlspbuwrtmzt.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
-VITE_GOOGLE_OAUTH_CLIENT_ID=1234567890-abc...
+VITE_SUPABASE_URL=https://<PROJECT_ID>.supabase.co
+VITE_SUPABASE_ANON_KEY=<YOUR_ANON_KEY>
+VITE_GOOGLE_OAUTH_CLIENT_ID=<YOUR_GOOGLE_CLIENT_ID>
 VITE_API_URL=https://echobrief-ten.vercel.app
 ```
 
 ### Vercel (Settings → Environment Variables)
 ```bash
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-VITE_GOOGLE_OAUTH_CLIENT_ID=...
+VITE_SUPABASE_URL=https://<PROJECT_ID>.supabase.co
+VITE_SUPABASE_ANON_KEY=<YOUR_ANON_KEY>
+VITE_GOOGLE_OAUTH_CLIENT_ID=<YOUR_GOOGLE_CLIENT_ID>
 VITE_API_URL=https://echobrief-ten.vercel.app
 ```
 
 ### Supabase Secrets (Edge Functions)
-```bash
-SUPABASE_URL=https://lekkpfpojlspbuwrtmzt.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIs...
-RECALL_API_KEY=6d5b5f5bf401869ffc061797ba5cd9f2e2f7f020
-SARVAM_API_KEY=sk_g9gcx19q_F3701xwAFplbozPOu6wayNYF
-OPENAI_API_KEY=sk-proj-...
-ANTHROPIC_API_KEY=sk-ant-api03-...
-RESEND_API_KEY=re_S8EJdusz_3i7RGEYez1XNMLG7hUb5oyox
+Set in Supabase Dashboard → Project Settings → Secrets:
+
 ```
+SUPABASE_URL=https://<PROJECT_ID>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<YOUR_SERVICE_KEY>
+RECALL_API_KEY=<YOUR_RECALL_KEY>
+SARVAM_API_KEY=<YOUR_SARVAM_KEY>
+OPENAI_API_KEY=<YOUR_OPENAI_KEY>
+ANTHROPIC_API_KEY=<YOUR_ANTHROPIC_KEY>
+RESEND_API_KEY=<YOUR_RESEND_KEY>
+```
+
+> ⚠️ **Never commit `.env` files or secrets to Git!** Use `.env.local` for local development.
+> See `.env.example` for the template.
 
 ---
 
