@@ -280,6 +280,36 @@ export default function Settings() {
     );
   }
 
+  // Refetch calendars when integrations tab is opened
+  const handleTabChange = (tabId: SettingsTab) => {
+    setActiveTab(tabId);
+    
+    // If switching to integrations tab, refetch calendars
+    if (tabId === 'integrations' && user) {
+      const refetchCalendars = async () => {
+        const { data, error } = await supabase
+          .from('calendars')
+          .select('id, email, calendar_name, is_primary, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .order('is_primary', { ascending: false });
+
+        if (!error && data) {
+          setGoogleCalendars(
+            data.map((cal: any) => ({
+              id: cal.id,
+              email: cal.email || '',
+              name: cal.calendar_name || 'Unnamed Calendar',
+              is_primary: cal.is_primary,
+              connected_at: new Date().toISOString(),
+            }))
+          );
+        }
+      };
+      refetchCalendars();
+    }
+  };
+
   const tabs = [
     { id: 'account' as const, label: 'Account', icon: '👤' },
     { id: 'bot' as const, label: 'Bot', icon: '🤖' },
@@ -304,7 +334,7 @@ export default function Settings() {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               style={{
                 padding: '12px 16px',
                 fontSize: 13,
