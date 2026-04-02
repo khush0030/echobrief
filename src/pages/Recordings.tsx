@@ -28,78 +28,21 @@ export default function Recordings() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[meetings] useEffect triggered, user:', user?.id);
+    console.log('[meetings] Component mounted, user:', user?.id);
     
-    // If user is still undefined, auth is loading — wait
-    if (!user) {
-      console.log('[meetings] User not ready yet');
-      return;
-    }
-
-    // If user exists but has no ID, something is wrong
-    if (!user.id) {
-      console.log('[meetings] User has no ID');
+    if (!user?.id) {
+      console.log('[meetings] No user ID, skipping fetch');
       setLoading(false);
       setMeetings([]);
       return;
     }
 
-    let isMounted = true;
-
-    const fetchMeetings = async () => {
-      console.log('[meetings] Fetch started for user:', user.id);
-      setLoading(true);
-      setFetchError(null);
-
-      // Absolute timeout — 3 seconds max
-      const absoluteTimeoutId = setTimeout(() => {
-        console.warn('[meetings] HARD STOP: Fetch timeout after 3s');
-        if (isMounted) {
-          setLoading(false);
-          setMeetings([]);
-          setFetchError('Taking too long. Please refresh.');
-        }
-      }, 3000);
-
-      try {
-        const { data, error } = await supabase
-          .from('meetings')
-          .select('id, title, status, created_at, start_time, duration_seconds, summary')
-          .eq('user_id', user.id)
-          .order('start_time', { ascending: false })
-          .limit(50);
-
-        clearTimeout(absoluteTimeoutId);
-
-        if (!isMounted) return;
-
-        console.log('[meetings] Fetch result:', { error, count: data?.length });
-
-        if (error) {
-          console.error('[meetings] Error:', error.message);
-          setFetchError(error.message);
-          setMeetings([]);
-        } else {
-          console.log('[meetings] Success, got', data?.length || 0, 'meetings');
-          setMeetings(data || []);
-        }
-      } catch (err: any) {
-        clearTimeout(absoluteTimeoutId);
-        if (!isMounted) return;
-        
-        console.error('[meetings] Exception:', err.message);
-        setFetchError(err.message || 'Failed to load');
-        setMeetings([]);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchMeetings();
-
-    return () => {
-      isMounted = false;
-    };
+    // TEMPORARY: Skip Supabase query and show empty state
+    // This proves the component renders correctly
+    console.log('[meetings] TEMP: Skipping Supabase, showing empty state');
+    setLoading(false);
+    setMeetings([]);
+    setFetchError(null);
   }, [user?.id]);
 
   const filteredMeetings = meetings.filter((meeting) => {
