@@ -32,7 +32,18 @@ type SettingsTab = 'account' | 'bot' | 'integrations' | 'security';
 export default function Settings() {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('account');
+  
+  // Get initial tab from URL params
+  const getInitialTab = (): SettingsTab => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'integrations' || tabParam === 'bot' || tabParam === 'security') {
+      return tabParam as SettingsTab;
+    }
+    return 'account';
+  };
+  
+  const [activeTab, setActiveTab] = useState<SettingsTab>(getInitialTab());
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
