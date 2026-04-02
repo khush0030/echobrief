@@ -53,10 +53,10 @@ serve(async (req) => {
         });
       }
 
-      // Check if state is expired (older than 10 minutes)
+      // Check if state is expired (older than 30 minutes)
       const createdAt = new Date(stateData.created_at);
       const now = new Date();
-      if (now.getTime() - createdAt.getTime() > 10 * 60 * 1000) {
+      if (now.getTime() - createdAt.getTime() > 30 * 60 * 1000) {
         // Clean up expired state
         await supabase.from("google_oauth_states").delete().eq("state", state);
         return new Response(null, {
