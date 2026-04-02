@@ -215,26 +215,21 @@ export default function Calendar() {
         {events.length === 0 ? (
           <div
             style={{
-              background: '#1C1917',
-              border: '1px solid #292524',
-              borderRadius: 16,
-              padding: 48,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '64px 32px',
               textAlign: 'center',
             }}
           >
-            <CalendarIcon style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#78716C' }} />
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#FAFAF9', marginBottom: 8 }}>
-              No upcoming meetings
+            <CalendarIcon style={{ width: 36, height: 36, marginBottom: 16, color: '#78716C' }} />
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: '#A8A29E', margin: 0, marginBottom: 8 }}>
+              No upcoming meetings found
             </h3>
-            <p style={{ fontSize: 13, color: '#78716C', marginBottom: 24 }}>
-              Connect your Google Calendar in Settings to see your upcoming meetings here.
+            <p style={{ fontSize: 13, color: '#78716C', margin: 0 }}>
+              Make sure your Google Calendar is connected in Settings
             </p>
-            <Button
-              onClick={() => window.location.href = '/settings?tab=integrations'}
-              style={{ background: '#FB923C', color: 'white' }}
-            >
-              Go to Settings
-            </Button>
           </div>
         ) : (
           <div>
