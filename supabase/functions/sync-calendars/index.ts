@@ -125,6 +125,52 @@ serve(async (req) => {
 
     console.log(`Starting calendar sync for user ${user_id}`)
 
+    // Get access token for fetching calendars from Google
+    let googleAccessToken: string | null = null
+    const { data: tokenData } = await supabaseClient
+      .from('user_oauth_tokens')
+      .select('google_access_token')
+      .eq('user_id', user_id)
+      .single()
+
+    if (tokenData?.google_access_token) {
+      googleAccessToken = tokenData.google_access_token
+    }
+
+    // If no calendar_ids provided, fetch from Google API
+    if (!calendar_ids && googleAccessToken) {
+      try {
+        const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+          headers: {
+            'Authorization': `Bearer ${googleAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (calendarResponse.ok) {
+          const { items: calendars } = await calendarResponse.json()
+          if (calendars && calendars.length > 0) {
+            // Insert calendars into DB
+            const calendarInserts = calendars.map((cal: any) => ({
+              user_id,
+              provider: 'google',
+              calendar_id: cal.id,
+              calendar_name: cal.summary,
+              email: cal.id,
+              is_primary: cal.primary || false,
+              is_active: true,
+            }))
+
+            await supabaseClient
+              .from('calendars')
+              .upsert(calendarInserts, { onConflict: 'user_id,calendar_id' })
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch calendars from Google:', err)
+      }
+    }
+
     // Fetch user's active Google calendars
     let calendarsToSync: any[] = []
 

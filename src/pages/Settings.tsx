@@ -251,50 +251,47 @@ export default function Settings() {
       
       const fetchAndSyncCalendars = async () => {
         try {
-          // Step 1: Fetch calendars from Google
-          const fetchResponse = await fetch(`${SUPABASE_URL}/functions/v1/fetch-google-calendars`, {
+          // Call sync-calendars which will fetch + sync all calendars
+          const syncResponse = await fetch(`${SUPABASE_URL}/functions/v1/sync-calendars`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
               'Content-Type': 'application/json',
             },
+            body: JSON.stringify({
+              user_id: user?.id,
+            }),
           });
 
-          if (!fetchResponse.ok) throw new Error('Failed to fetch calendars');
-          
-          const fetchData = await fetchResponse.json();
-          if (fetchData.success && fetchData.calendars) {
-            setGoogleCalendars(
-              fetchData.calendars.map((cal: any) => ({
-                id: cal.id,
-                email: cal.email || '',
-                name: cal.calendar_name || 'Unnamed Calendar',
-                is_primary: cal.is_primary,
-                connected_at: new Date().toISOString(),
-              }))
-            );
-
-            // Step 2: Sync events for all calendars
-            try {
-              await fetch(`${SUPABASE_URL}/functions/v1/sync-calendars`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${session.access_token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  user_id: user?.id,
-                  calendar_ids: fetchData.calendars.map((cal: any) => cal.id),
-                }),
-              });
-            } catch (syncError) {
-              console.error('Failed to sync calendars:', syncError);
-            }
-
-            toast({ title: 'Success!', description: 'Google Calendar connected and events synced.' });
+          if (!syncResponse.ok) {
+            const error = await syncResponse.json();
+            throw new Error(error.error || 'Failed to sync calendars');
           }
+
+          // Fetch updated calendars from DB
+          if (user) {
+            const { data: calendarsData } = await supabase
+              .from('calendars')
+              .select('id, email, calendar_name, is_primary, is_active')
+              .eq('user_id', user.id)
+              .eq('is_active', true);
+
+            if (calendarsData) {
+              setGoogleCalendars(
+                calendarsData.map((cal: any) => ({
+                  id: cal.id,
+                  email: cal.email || '',
+                  name: cal.calendar_name || 'Unnamed Calendar',
+                  is_primary: cal.is_primary,
+                  connected_at: new Date().toISOString(),
+                }))
+              );
+            }
+          }
+
+          toast({ title: 'Success!', description: 'Google Calendar connected and events synced.' });
         } catch (error: any) {
-          console.error('Fetch calendars error:', error);
+          console.error('Calendar sync error:', error);
           const errorMsg = error?.message || 'Failed to connect calendar';
           toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
         }
