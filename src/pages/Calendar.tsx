@@ -62,32 +62,84 @@ export default function Calendar() {
   const handleManualSync = async () => {
     setSyncing(true);
     try {
-      // Get session token
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
-        return;
+      if (!user) throw new Error('Not logged in');
+
+      // Get Google access token from DB
+      const { data: tokenData, error: tokenError } = await supabase
+        .from('user_oauth_tokens')
+        .select('google_access_token')
+        .eq('user_id', user.id)
+        .single();
+
+      if (tokenError || !tokenData?.google_access_token) {
+        throw new Error('Google Calendar not connected');
       }
 
-      // Call sync function
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-calendar-events`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Get user's calendars
+      const { data: calendars, error: calError } = await supabase
+        .from('calendars')
+        .select('id, calendar_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      if (calError || !calendars || calendars.length === 0) {
+        throw new Error('No calendars found');
+      }
 
-      toast({ title: 'Synced!', description: `${result.events_synced} events updated` });
+      const now = new Date();
+      const maxDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      // Refetch events
+      let allEvents: any[] = [];
+
+      // Fetch events from each calendar
+      for (const cal of calendars) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendar_id)}/events?` +
+            `timeMin=${now.toISOString()}&timeMax=${maxDate.toISOString()}&singleEvents=true&orderBy=startTime`,
+            {
+              headers: {
+                'Authorization': `Bearer ${tokenData.google_access_token}`,
+              },
+            }
+          );
+
+          if (response.ok) {
+            const { items } = await response.json();
+            if (items) {
+              allEvents.push(
+                ...items.map((event: any) => ({
+                  user_id: user.id,
+                  calendar_id: cal.id,
+                  event_id: event.id,
+                  title: event.summary || 'No title',
+                  description: event.description || null,
+                  start_time: event.start?.dateTime || event.start?.date,
+                  end_time: event.end?.dateTime || event.end?.date,
+                  is_all_day: !event.start?.dateTime,
+                }))
+              );
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to fetch from calendar:`, err);
+        }
+      }
+
+      // Save to DB
+      if (allEvents.length > 0) {
+        await supabase
+          .from('calendar_events')
+          .upsert(allEvents, { onConflict: 'user_id,event_id' });
+      }
+
+      toast({ title: 'Synced!', description: `${allEvents.length} events updated` });
+
+      // Refetch and display
       const { data, error } = await supabase
         .from('calendar_events')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .gte('start_time', new Date().toISOString())
         .order('start_time', { ascending: true })
         .limit(50);
