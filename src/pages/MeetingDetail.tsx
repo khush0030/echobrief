@@ -95,6 +95,8 @@ export default function MeetingDetail() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [speakerSegments, setSpeakerSegments] = useState<SpeakerSegment[]>([]);
   const [insights, setInsights] = useState<MeetingInsights | null>(null);
+  const [emailMessages, setEmailMessages] = useState<any[]>([]);
+  const [slackMessages, setSlackMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [slackDialogOpen, setSlackDialogOpen] = useState(false);
@@ -176,6 +178,27 @@ export default function MeetingDetail() {
         if (profile) {
           setSlackChannelId(profile.slack_channel_id || undefined);
           setSlackChannelName(profile.slack_channel_name || undefined);
+        }
+
+        // Fetch delivery history
+        const { data: emailMsgs } = await supabase
+          .from('email_messages')
+          .select('*')
+          .eq('meeting_id', id)
+          .order('created_at', { ascending: false });
+
+        if (emailMsgs) {
+          setEmailMessages(emailMsgs);
+        }
+
+        const { data: slackMsgs } = await supabase
+          .from('slack_messages')
+          .select('*')
+          .eq('meeting_id', id)
+          .order('created_at', { ascending: false });
+
+        if (slackMsgs) {
+          setSlackMessages(slackMsgs);
         }
       }
 
@@ -319,6 +342,7 @@ export default function MeetingDetail() {
     { id: 'summary', label: 'Summary', icon: <Zap size={14} /> },
     { id: 'actions', label: `Actions (${actionItemCount})`, icon: <CheckCircle2 size={14} /> },
     { id: 'transcript', label: 'Transcript', icon: <FileText size={14} /> },
+    { id: 'delivery', label: 'Delivery', icon: <Mail size={14} /> },
   ];
 
   return (
@@ -742,6 +766,76 @@ export default function MeetingDetail() {
                   <ProtoCard style={{ textAlign: 'center', padding: 40 }}>
                     <FileText size={32} style={{ color: '#78716C', margin: '0 auto 12px' }} />
                     <p className="text-sm" style={{ color: '#78716C' }}>Transcript will appear here after processing</p>
+                  </ProtoCard>
+                )}
+              </div>
+            )}
+
+            {/* ═══ DELIVERY TAB ═══ */}
+            {activeTab === 'delivery' && (
+              <div className="space-y-3">
+                {/* Email Deliveries */}
+                {emailMessages.length > 0 && (
+                  <>
+                    <h3 className="text-[15px] font-semibold text-foreground mb-3 flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      <Mail size={16} style={{ color: '#3B82F6' }} /> Email Deliveries
+                    </h3>
+                    {emailMessages.map((msg, i) => (
+                      <ProtoCard key={i} style={{ padding: 16 }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-foreground">{msg.recipient_email}</div>
+                            <div className="text-xs mt-1" style={{ color: '#78716C' }}>
+                              {format(new Date(msg.sent_at || msg.created_at), 'MMM d, yyyy h:mm a')}
+                            </div>
+                            {msg.error_message && (
+                              <div className="text-xs mt-1" style={{ color: '#EF4444' }}>
+                                Error: {msg.error_message}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, color: msg.status === 'sent' ? '#22C55E' : '#A8A29E', background: msg.status === 'sent' ? 'rgba(34,197,94,0.1)' : 'rgba(168,168,168,0.1)' }}>
+                            {msg.status === 'sent' ? '✓ Sent' : msg.status === 'failed' ? '✗ Failed' : 'Pending'}
+                          </span>
+                        </div>
+                      </ProtoCard>
+                    ))}
+                  </>
+                )}
+
+                {/* Slack Deliveries */}
+                {slackMessages.length > 0 && (
+                  <>
+                    <h3 className="text-[15px] font-semibold text-foreground mb-3 mt-6 flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      <Send size={16} style={{ color: '#FB923C' }} /> Slack Deliveries
+                    </h3>
+                    {slackMessages.map((msg, i) => (
+                      <ProtoCard key={i} style={{ padding: 16 }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-foreground">{msg.channel_id}</div>
+                            <div className="text-xs mt-1" style={{ color: '#78716C' }}>
+                              {format(new Date(msg.sent_at || msg.created_at), 'MMM d, yyyy h:mm a')}
+                            </div>
+                            {msg.error_message && (
+                              <div className="text-xs mt-1" style={{ color: '#EF4444' }}>
+                                Error: {msg.error_message}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, color: msg.status === 'sent' ? '#22C55E' : '#A8A29E', background: msg.status === 'sent' ? 'rgba(34,197,94,0.1)' : 'rgba(168,168,168,0.1)' }}>
+                            {msg.status === 'sent' ? '✓ Sent' : msg.status === 'failed' ? '✗ Failed' : 'Pending'}
+                          </span>
+                        </div>
+                      </ProtoCard>
+                    ))}
+                  </>
+                )}
+
+                {emailMessages.length === 0 && slackMessages.length === 0 && (
+                  <ProtoCard style={{ textAlign: 'center', padding: 40 }}>
+                    <Mail size={32} style={{ color: '#78716C', margin: '0 auto 12px' }} />
+                    <p className="text-sm" style={{ color: '#78716C' }}>No deliveries yet. Send this report via Email or Slack above.</p>
                   </ProtoCard>
                 )}
               </div>

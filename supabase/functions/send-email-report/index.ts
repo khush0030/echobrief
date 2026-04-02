@@ -201,6 +201,23 @@ serve(async (req) => {
 
     console.log(`Email sent to ${recipient_email}, message ID: ${sendResult.messageId}`)
 
+    // Log email delivery
+    const { error: logError } = await supabaseClient
+      .from('email_messages')
+      .insert({
+        meeting_id,
+        recipient_email,
+        subject: `Meeting Report: ${meeting.title}`,
+        status: 'sent',
+        message_id: sendResult.messageId,
+        sent_at: new Date().toISOString(),
+      })
+
+    if (logError) {
+      console.warn('Failed to log email delivery:', logError.message)
+      // Don't fail the request, email was already sent
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -212,6 +229,24 @@ serve(async (req) => {
     )
   } catch (error: any) {
     console.error('Email report error:', error.message)
+
+    // Log failed delivery attempt
+    if (meeting_id && recipient_email) {
+      try {
+        await supabaseClient
+          .from('email_messages')
+          .insert({
+            meeting_id,
+            recipient_email,
+            subject: `Meeting Report: [Error]`,
+            status: 'failed',
+            error_message: error.message,
+          })
+      } catch (logError) {
+        console.warn('Failed to log email error:', logError)
+      }
+    }
+
     return new Response(
       JSON.stringify({
         error: error.message,
