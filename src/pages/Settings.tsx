@@ -242,8 +242,11 @@ export default function Settings() {
 
   // After OAuth redirect, fetch calendars and sync events
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleConnected = params.get('google_connected');
     const awaitingCalendarFetch = sessionStorage.getItem('awaiting-calendar-fetch');
-    if (awaitingCalendarFetch && user && session?.access_token) {
+    
+    if ((googleConnected === 'true' || awaitingCalendarFetch) && user && session?.access_token) {
       sessionStorage.removeItem('awaiting-calendar-fetch');
       
       const fetchAndSyncCalendars = async () => {
@@ -292,13 +295,14 @@ export default function Settings() {
           }
         } catch (error: any) {
           console.error('Fetch calendars error:', error);
-          toast({ title: 'Error', description: 'Failed to connect calendar', variant: 'destructive' });
+          const errorMsg = error?.message || 'Failed to connect calendar';
+          toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
         }
       };
 
       fetchAndSyncCalendars();
     }
-  }, [user, session?.access_token]);
+  }, [user, session?.access_token, activeTab]);
 
   const handleConnectSlack = async () => {
     if (!user || !slackChannelId.trim()) return;
