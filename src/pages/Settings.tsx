@@ -397,15 +397,31 @@ export default function Settings() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '12px',
+                        padding: '12px 16px',
                         borderRadius: 8,
                         background: '#0C0A09',
-                        border: '1px solid #292524',
+                        border: '1px solid #22C55E',
                       }}
                     >
-                      <div>
-                        <p style={{ fontSize: 13, color: '#FAFAF9', margin: 0 }}>{cal.name}</p>
-                        <p style={{ fontSize: 11, color: '#78716C', margin: '4px 0 0 0' }}>{cal.email}</p>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <p style={{ fontSize: 13, fontWeight: 500, color: '#FAFAF9', margin: 0 }}>
+                            {cal.name}
+                          </p>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: '#22C55E',
+                              background: '#22C55E20',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            ✓ Connected
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 11, color: '#78716C', margin: 0 }}>📧 {cal.email}</p>
                       </div>
                       <button
                         onClick={() => handleDisconnectGoogleCalendar(cal.id)}
@@ -414,8 +430,10 @@ export default function Settings() {
                           border: 'none',
                           color: '#EF4444',
                           cursor: 'pointer',
-                          padding: '4px',
+                          padding: '4px 8px',
+                          marginLeft: 12,
                         }}
+                        title="Disconnect this calendar"
                       >
                         <X size={18} />
                       </button>
@@ -423,7 +441,9 @@ export default function Settings() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#78716C' }}>No calendars connected. Add one to get started.</p>
+                <p style={{ fontSize: 12, color: '#78716C', textAlign: 'center', padding: 12 }}>
+                  No calendars connected. Click "Add Calendar" to get started.
+                </p>
               )}
             </div>
 
