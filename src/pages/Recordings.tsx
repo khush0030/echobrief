@@ -49,32 +49,36 @@ export default function Recordings() {
       }, 8000);
 
       try {
+        console.log('[meetings] Starting fetch for user:', user.id);
+        
         const { data, error } = await supabase
           .from('meetings')
-          .select('*')
+          .select('id, title, status, created_at, start_time, duration_seconds, summary')
           .eq('user_id', user.id)
-          .order('start_time', { ascending: false });
+          .order('start_time', { ascending: false })
+          .limit(50);
 
         clearTimeout(timeoutId);
 
-        console.log('[meetings] Fetch result:', { data, error, count: data?.length });
+        console.log('[meetings] Fetch complete:', { data, error, count: data?.length });
 
         if (error) {
           console.error('[meetings] Supabase error:', error);
-          setFetchError(error.message);
+          setFetchError(`Error: ${error.message}`);
           setMeetings([]);
+          setLoading(false);
         } else {
           // data is [] when there are no meetings — this is NOT an error
+          console.log('[meetings] Success! Setting meetings:', data?.length || 0);
           setMeetings(data ?? []);
+          setLoading(false);
         }
       } catch (err: any) {
         clearTimeout(timeoutId);
         console.error('[meetings] Unexpected error:', err);
-        setFetchError(err.message || 'Failed to load meetings');
+        setFetchError(`Error: ${err.message || 'Failed to load meetings'}`);
         setMeetings([]);
-      } finally {
-        clearTimeout(timeoutId);
-        setLoading(false); // ALWAYS runs
+        setLoading(false);
       }
     };
 
