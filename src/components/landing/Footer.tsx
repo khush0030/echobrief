@@ -28,23 +28,48 @@ export function Footer() {
             <p style={{ fontSize: '13px', fontFamily: "'DM Sans', sans-serif", color: '#78716C', margin: 0 }}>
               EchoBrief by OltaFlock AI — 2026
             </p>
-            {['Privacy', 'Terms', 'Docs', 'Twitter'].map((label) => (
-              <a
-                key={label}
-                href={`#${label.toLowerCase()}`}
-                style={{
-                  fontSize: '13px',
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: '#78716C',
-                  textDecoration: 'none',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#A8A29E')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#78716C')}
-              >
-                {label}
-              </a>
-            ))}
+            <Link
+              to="/privacy"
+              style={{
+                fontSize: '13px',
+                fontFamily: "'DM Sans', sans-serif",
+                color: '#78716C',
+                textDecoration: 'none',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#A8A29E')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#78716C')}
+            >
+              Privacy
+            </Link>
+            <Link
+              to="/terms"
+              style={{
+                fontSize: '13px',
+                fontFamily: "'DM Sans', sans-serif",
+                color: '#78716C',
+                textDecoration: 'none',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#A8A29E')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#78716C')}
+            >
+              Terms
+            </Link>
+            <Link
+              to="/docs"
+              style={{
+                fontSize: '13px',
+                fontFamily: "'DM Sans', sans-serif",
+                color: '#78716C',
+                textDecoration: 'none',
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#A8A29E')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#78716C')}
+            >
+              Docs
+            </Link>
           </div>
         </div>
       </div>

@@ -20,6 +20,8 @@ import Settings from "./pages/Settings";
 import CalendarPage from "./pages/CalendarPolished";
 import ActionItems from "./pages/ActionItems";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Terms from "./pages/Terms";
+import Docs from "./pages/Docs";
 import ChromeExtensionGuide from "./pages/ChromeExtensionGuide";
 import NotFound from "./pages/NotFound";
 
@@ -57,7 +59,10 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/docs" element={<Docs />} />
         <Route
           path="/onboarding"
           element={
