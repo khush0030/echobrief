@@ -63,18 +63,40 @@ export default function Settings() {
     if (!user) return;
 
     const fetchProfile = async () => {
-      const { data, error } = await supabase
+      // Fetch profile
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
-      if (!error && data) {
-        setProfile(data as Profile);
-        setFullName(data.full_name || '');
-        setSlackChannelId(data.slack_channel_id || '');
-        setSlackChannelName(data.slack_channel_name || '');
+      if (!profileError && profileData) {
+        setProfile(profileData as Profile);
+        setFullName(profileData.full_name || '');
+        setSlackChannelId(profileData.slack_channel_id || '');
+        setSlackChannelName(profileData.slack_channel_name || '');
       }
+
+      // Fetch connected Google Calendars
+      const { data: calendarsData, error: calendarsError } = await supabase
+        .from('calendars')
+        .select('id, email, calendar_name, is_primary, is_active')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('is_primary', { ascending: false });
+
+      if (!calendarsError && calendarsData) {
+        setGoogleCalendars(
+          calendarsData.map((cal: any) => ({
+            id: cal.id,
+            email: cal.email || '',
+            name: cal.calendar_name || 'Unnamed Calendar',
+            is_primary: cal.is_primary,
+            connected_at: new Date().toISOString(),
+          }))
+        );
+      }
+
       setLoading(false);
     };
 
@@ -161,6 +183,15 @@ export default function Settings() {
 
   const handleDisconnectGoogleCalendar = async (calendarId: string) => {
     try {
+      // Mark calendar as inactive in database
+      const { error } = await supabase
+        .from('calendars')
+        .update({ is_active: false })
+        .eq('id', calendarId)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
       setGoogleCalendars(prev => prev.filter(cal => cal.id !== calendarId));
       toast({ title: 'Disconnected', description: 'Google Calendar has been removed.' });
     } catch (error: any) {
