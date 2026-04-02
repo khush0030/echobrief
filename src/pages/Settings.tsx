@@ -240,48 +240,32 @@ export default function Settings() {
     }
   };
 
-  // After OAuth redirect, fetch calendars from Google API directly
+  // After OAuth redirect, fetch calendars
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const googleConnected = params.get('google_connected');
     
     if (googleConnected === 'true' && user && session?.access_token) {
-      const fetchAndSaveCalendars = async () => {
+      const fetchCalendars = async () => {
         try {
-          // Get user's Google access token from DB
-          const { data: tokenData, error: tokenError } = await supabase
-            .from('user_oauth_tokens')
-            .select('google_access_token')
-            .eq('user_id', user.id)
-            .single();
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/get-user-calendars`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
 
-          if (tokenError || !tokenData?.google_access_token) {
-            throw new Error('Google access token not found');
-          }
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error);
 
-          // Fetch calendars from Google Calendar API directly
-          const calendarResponse = await fetch(
-            'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-            {
-              headers: {
-                'Authorization': `Bearer ${tokenData.google_access_token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-
-          if (!calendarResponse.ok) {
-            throw new Error(`Google API error: ${calendarResponse.status}`);
-          }
-
-          const { items: calendars } = await calendarResponse.json();
-
+          const { calendars } = data;
           if (!calendars || calendars.length === 0) {
             toast({ title: 'Info', description: 'No calendars found' });
             return;
           }
 
-          // Save calendars to DB
+          // Save to DB and update UI
           const calendarInserts = calendars.map((cal: any) => ({
             user_id: user.id,
             provider: 'google',
@@ -292,13 +276,10 @@ export default function Settings() {
             is_active: true,
           }));
 
-          const { error: upsertError } = await supabase
+          await supabase
             .from('calendars')
             .upsert(calendarInserts, { onConflict: 'user_id,calendar_id' });
 
-          if (upsertError) throw upsertError;
-
-          // Update local state
           setGoogleCalendars(
             calendars.map((cal: any) => ({
               id: cal.id,
@@ -311,12 +292,11 @@ export default function Settings() {
 
           toast({ title: 'Success!', description: `Connected ${calendars.length} calendar(s).` });
         } catch (error: any) {
-          console.error('Calendar sync error:', error);
           toast({ title: 'Error', description: error?.message || 'Failed to connect calendar', variant: 'destructive' });
         }
       };
 
-      fetchAndSaveCalendars();
+      fetchCalendars();
     }
   }, [user, session?.access_token]);
 
