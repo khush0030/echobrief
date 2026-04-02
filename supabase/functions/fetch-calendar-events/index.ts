@@ -2,12 +2,30 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { user_id, access_token } = await req.json();
+    let user_id: string;
+    let access_token: string;
+
+    const body = await req.json();
+    user_id = body.user_id;
+    access_token = body.access_token;
+
+    if (!user_id || !access_token) {
+      return new Response(JSON.stringify({ error: 'Missing user_id or access_token', events: [] }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -57,13 +75,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ events: allEvents }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   } catch (error) {
     console.error("Error:", error);
     return new Response(JSON.stringify({ error: "Server error", events: [] }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 });
