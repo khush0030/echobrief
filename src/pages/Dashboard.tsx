@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { RecordingButton } from '@/components/dashboard/RecordingButton';
 import { ExtensionStatus } from '@/components/dashboard/ExtensionStatus';
+import { DigestSettings } from '@/components/dashboard/DigestSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Meeting } from '@/types/meeting';
@@ -80,11 +81,13 @@ function GradientBar() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const location = useLocation();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [insightCounts, setInsightCounts] = useState<Record<string, boolean>>({});
+  const [digestSending, setDigestSending] = useState(false);
+  const [showDigestSettings, setShowDigestSettings] = useState(false);
   
   const prefillMeeting = (location.state as { prefillMeeting?: PrefillMeeting })?.prefillMeeting;
 
@@ -162,6 +165,50 @@ export default function Dashboard() {
     return `${mins}m`;
   };
 
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+  const handleSendDigest = async () => {
+    if (!user || !session?.access_token) return;
+    
+    setDigestSending(true);
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!profile?.email) {
+        alert('No email found in profile');
+        return;
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-digest-report`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          frequency: 'manual',
+          recipient_emails: [profile.email],
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`Digest sent! (${data.meetings_count} meetings)`);
+      } else {
+        alert('Error: ' + (data.error || 'Failed to send'));
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setDigestSending(false);
+    }
+  };
+
   const formatTotalDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -204,6 +251,51 @@ export default function Dashboard() {
 
         {/* Extension Status Banner */}
         <ExtensionStatus className="mb-6" />
+
+        {/* Digest Settings & Send Button */}
+        {meetings.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              <button
+                onClick={handleSendDigest}
+                disabled={digestSending}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#FB923C',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  opacity: digestSending ? 0.6 : 1,
+                }}
+              >
+                {digestSending ? '⏳ Sending...' : '📊 Send Digest Now'}
+              </button>
+              <button
+                onClick={() => setShowDigestSettings(!showDigestSettings)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  border: '1px solid #292524',
+                  background: 'transparent',
+                  color: '#A8A29E',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              >
+                ⚙️ Settings
+              </button>
+            </div>
+            {showDigestSettings && user && (
+              <DigestSettings user_id={user.id} onSave={() => setShowDigestSettings(false)} />
+            )}
+          </div>
+        )}
 
         {/* Quick Stats — 4 column grid, icon top-left, big number, label below (prototype exact) */}
         {!loading && meetings.length > 0 && (
