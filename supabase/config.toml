@@ -44,3 +44,48 @@ verify_jwt = false
 
 [functions.send-meeting-email]
 verify_jwt = false
+
+[functions.start-recall-recording]
+verify_jwt = false
+
+[functions.recall-webhook]
+verify_jwt = false
+
+[functions.auto-join-meetings]
+verify_jwt = false
+
+[functions.fetch-calendar-events]
+verify_jwt = false
+
+[functions.fetch-google-calendars]
+verify_jwt = false
+
+[functions.generate-digest-report]
+verify_jwt = false
+
+[functions.generate-meeting-insights]
+verify_jwt = false
+
+[functions.get-user-calendars]
+verify_jwt = false
+
+[functions.queue-onboarding-emails]
+verify_jwt = false
+
+[functions.send-email-report]
+verify_jwt = false
+
+[functions.send-meeting-summary-email]
+verify_jwt = false
+
+[functions.send-scheduled-emails]
+verify_jwt = false
+
+[functions.send-whatsapp-report]
+verify_jwt = false
+
+[functions.sync-calendar-events]
+verify_jwt = false
+
+[functions.sync-calendars]
+verify_jwt = false
