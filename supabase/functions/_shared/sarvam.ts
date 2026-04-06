@@ -7,13 +7,23 @@ interface SarvamJobResponse {
   job_state: string;
 }
 
+interface FileSignedURLDetails {
+  file_url: string;
+  file_metadata: Record<string, unknown> | null;
+}
+
 interface SarvamUploadResponse {
-  file_name: string;
-  url: string;
+  job_id: string;
+  job_state: string;
+  upload_urls: Record<string, FileSignedURLDetails>;
+  storage_container_type: string;
 }
 
 interface SarvamDownloadResponse {
-  files: Array<{ file_name: string; url: string }>;
+  job_id: string;
+  job_state: string;
+  download_urls: Record<string, FileSignedURLDetails>;
+  storage_container_type: string;
 }
 
 export async function createSarvamJob(
@@ -55,6 +65,7 @@ export async function uploadToSarvamJob(
   fileName: string,
   audioBlob: Blob,
 ): Promise<void> {
+  // Step 1: Get presigned upload URL
   const uploadRes = await fetch(`${SARVAM_BASE_URL}/upload-files`, {
     method: "POST",
     headers: {
@@ -72,13 +83,16 @@ export async function uploadToSarvamJob(
     throw new Error(`Sarvam get upload URL failed (${uploadRes.status}): ${err}`);
   }
 
-  const uploadData: SarvamUploadResponse[] = await uploadRes.json();
-  const presignedUrl = uploadData[0]?.url;
+  const uploadData: SarvamUploadResponse = await uploadRes.json();
+  const presignedUrl = uploadData.upload_urls?.[fileName]?.file_url;
 
   if (!presignedUrl) {
-    throw new Error("No presigned upload URL returned from Sarvam");
+    throw new Error(
+      `No presigned upload URL returned from Sarvam for file "${fileName}". Response: ${JSON.stringify(uploadData)}`,
+    );
   }
 
+  // Step 2: PUT the audio file to the presigned URL
   const putRes = await fetch(presignedUrl, {
     method: "PUT",
     headers: { "Content-Type": "application/octet-stream" },
@@ -132,10 +146,12 @@ export async function downloadSarvamResults(
   }
 
   const downloadData: SarvamDownloadResponse = await res.json();
-  const downloadUrl = downloadData.files?.[0]?.url;
+  const downloadUrl = downloadData.download_urls?.[fileName]?.file_url;
 
   if (!downloadUrl) {
-    throw new Error("No presigned download URL returned from Sarvam");
+    throw new Error(
+      `No presigned download URL returned from Sarvam for file "${fileName}". Response: ${JSON.stringify(downloadData)}`,
+    );
   }
 
   const fileRes = await fetch(downloadUrl);
