@@ -112,7 +112,7 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
     const checkExisting = async () => {
       const { data } = await supabase
         .from('meetings')
-        .select('id, status, error_message')
+        .select('id, status')
         .eq('calendar_event_id', event.id)
         .not('recall_bot_id', 'is', null)
         .order('created_at', { ascending: false })
@@ -122,13 +122,12 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
       if (data) {
         setMeetingId(data.id);
         setBotStatus(mapDbStatusToDisplay(data.status));
-        if (data.error_message) setBotError(data.error_message);
       }
     };
     checkExisting();
   }, [event?.id, stopPolling]);
 
-  // Poll meeting status when we have a meetingId and status is not terminal
+  // Poll meeting status via the check-recall-status edge function
   useEffect(() => {
     if (!meetingId) return;
     const isTerminal = botStatus === 'completed' || botStatus === 'failed' || botStatus === 'idle';
@@ -138,16 +137,33 @@ export function MeetingDetailModal({ event, onClose, onRecordWithBot }: MeetingD
     }
 
     const poll = async () => {
-      const { data } = await supabase
-        .from('meetings')
-        .select('status, error_message')
-        .eq('id', meetingId)
-        .single();
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session?.session?.access_token;
+        if (!token) return;
 
-      if (data) {
-        const newStatus = mapDbStatusToDisplay(data.status);
-        setBotStatus(newStatus);
-        if (data.error_message) setBotError(data.error_message);
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-recall-status`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ meeting_id: meetingId }),
+          }
+        );
+
+        if (!res.ok) return;
+        const result = await res.json();
+        if (result.status) {
+          setBotStatus(mapDbStatusToDisplay(result.status));
+        }
+        if (result.error) {
+          setBotError(result.error);
+        }
+      } catch {
+        // Silently ignore polling errors
       }
     };
 

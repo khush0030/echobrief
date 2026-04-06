@@ -48,6 +48,9 @@ verify_jwt = false
 [functions.start-recall-recording]
 verify_jwt = false
 
+[functions.check-recall-status]
+verify_jwt = false
+
 [functions.recall-webhook]
 verify_jwt = false
 
