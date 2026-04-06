@@ -63,7 +63,7 @@ export async function uploadToSarvamJob(
     },
     body: JSON.stringify({
       job_id: jobId,
-      file_names: [fileName],
+      files: [fileName],
     }),
   });
 
@@ -122,7 +122,7 @@ export async function downloadSarvamResults(
     },
     body: JSON.stringify({
       job_id: jobId,
-      file_names: [fileName],
+      files: [fileName],
     }),
   });
 
