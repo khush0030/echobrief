@@ -36,7 +36,14 @@ export async function getAudioDownloadUrl(botData: Record<string, any>) {
     ? botData.recordings
     : [];
 
-  // Primary path: use the /audio_mixed/ API with the recording ID.
+  // Best path: audio_mixed download_url is directly on the recording object
+  // under media_shortcuts (always present when audio_mixed recording is configured).
+  for (const recording of recordings) {
+    const url = recording.media_shortcuts?.audio_mixed?.data?.download_url;
+    if (url) return url;
+  }
+
+  // Secondary path: call the /audio_mixed/ API with the recording ID.
   const recordingWithId = recordings.find((r: any) => r?.id);
   if (recordingWithId?.id) {
     const response = await fetch(
@@ -59,12 +66,7 @@ export async function getAudioDownloadUrl(botData: Record<string, any>) {
     }
   }
 
-  // Fallback: check if any recording object itself has a direct URL
-  for (const recording of recordings) {
-    if (recording.url) return recording.url;
-  }
-
-  // Last resort: video_url
+  // Last resort: video_url (will be an mp4, but better than nothing)
   return botData.video_url || null;
 }
 

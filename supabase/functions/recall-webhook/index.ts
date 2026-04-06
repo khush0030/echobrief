@@ -168,12 +168,15 @@ serve(async (req) => {
     );
 
     // Determine if we should trigger the audio-download → Sarvam pipeline.
-    // Two events signal readiness:
-    //   1. "audio_mixed.done" — async audio is definitely ready (preferred)
-    //   2. "bot.done" — bot shut down; audio may already be available
+    // Recall sends events with the category prefix from the event name field, e.g.:
+    //   "status.done", "status.call_ended" (bot lifecycle)
+    //   "audio_mixed.done" (async audio ready — preferred signal)
+    //   "bot.done" (legacy / some account configs)
     // We skip processing if Sarvam was already kicked off for this meeting.
     const isAudioReady = eventCategory === "audio_mixed" && statusCode === "done";
-    const isBotDone = eventCategory === "bot" && statusCode === "done";
+    const isBotDone =
+      (eventCategory === "bot" || eventCategory === "status") &&
+      statusCode === "done";
     const shouldProcessAudio =
       (isAudioReady || isBotDone) && !meeting.sarvam_job_id;
 
