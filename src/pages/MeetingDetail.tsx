@@ -23,7 +23,7 @@ import {
 import { 
   ArrowLeft, Calendar, Clock, Loader2, ChevronRight, Trash2, Users, Send, 
   Lightbulb, AlertTriangle, HelpCircle, RefreshCw, Zap, CheckCircle2, 
-  FileText, Globe, MessageCircle, Mail, Languages, Bot, Chrome
+  FileText, Globe, MessageCircle, Mail, Languages, Bot
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -63,11 +63,10 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function SourceBadge({ source }: { source: string }) {
-  const isBot = source === 'manual' || source === 'calendar';
   return (
-    <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, color: isBot ? '#A855F7' : '#FB923C', background: isBot ? 'rgba(168,85,247,0.12)' : 'rgba(249,115,22,0.1)' }}>
-      {isBot ? <Bot size={11} /> : <Chrome size={11} />}
-      {isBot ? 'Bot' : 'Extension'}
+    <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, color: '#A855F7', background: 'rgba(168,85,247,0.12)' }}>
+      <Bot size={11} />
+      Bot
     </span>
   );
 }

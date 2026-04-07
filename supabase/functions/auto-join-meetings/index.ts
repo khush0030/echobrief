@@ -8,16 +8,16 @@ const RECALL_BASE_URL = `${RECALL_API_BASE_URL}/api/v1`
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-// This function is called by a cron job every minute to check for upcoming meetings
+// Called by a pg_cron job every minute to auto-join calendar meetings
 serve(async (req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    
-    // Get all users with auto-join enabled
+
+    // Get all users with auto-join enabled from profiles table
     const { data: prefs, error: prefsError } = await supabase
-      .from('notification_preferences')
-      .select('user_id, notetaker_name, join_minutes_before')
-      .eq('auto_record', true)
+      .from('profiles')
+      .select('user_id, notetaker_name')
+      .eq('auto_join_enabled', true)
 
     if (prefsError || !prefs?.length) {
       return new Response(JSON.stringify({ message: 'No users with auto-join enabled', error: prefsError }), {
@@ -40,10 +40,9 @@ serve(async (req) => {
       // Check if token needs refresh
       let accessToken = tokens.google_access_token
       if (tokens.google_token_expiry && new Date(tokens.google_token_expiry) < new Date()) {
-        // Token expired, need to refresh
         const googleClientId = Deno.env.get('GOOGLE_CLIENT_ID')
         const googleClientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
-        
+
         if (tokens.google_refresh_token && googleClientId && googleClientSecret) {
           const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
@@ -58,12 +57,11 @@ serve(async (req) => {
           const refreshData = await refreshResponse.json()
           if (refreshData.access_token) {
             accessToken = refreshData.access_token
-            // Update token in DB
             const expiryDate = new Date()
             expiryDate.setSeconds(expiryDate.getSeconds() + (refreshData.expires_in || 3600))
             await supabase
               .from('user_oauth_tokens')
-              .update({ 
+              .update({
                 google_access_token: accessToken,
                 google_token_expiry: expiryDate.toISOString()
               })
@@ -72,11 +70,11 @@ serve(async (req) => {
         }
       }
 
-      // Get upcoming calendar events (next 5 minutes)
+      // Look for calendar events starting within the next 2 minutes
       const now = new Date()
-      const joinMinutes = pref.join_minutes_before || 2
+      const joinMinutes = 2
       const checkWindow = new Date(now.getTime() + (joinMinutes + 1) * 60 * 1000)
-      
+
       const calendarResponse = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
         `timeMin=${now.toISOString()}&timeMax=${checkWindow.toISOString()}&singleEvents=true&orderBy=startTime`,
@@ -91,30 +89,36 @@ serve(async (req) => {
       const events = calendarData.items || []
 
       for (const event of events) {
-        // Check if event has a meeting link
-        const meetingUrl = event.hangoutLink || 
+        // Only process events with a video meeting link
+        const meetingUrl = event.hangoutLink ||
           event.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === 'video')?.uri
 
         if (!meetingUrl) continue
 
-        // Check if we already sent a bot to this meeting
+        // Dedup: skip if we already sent a bot to this calendar event
         const { data: existingMeeting } = await supabase
           .from('meetings')
           .select('id')
           .eq('user_id', pref.user_id)
           .eq('calendar_event_id', event.id)
           .eq('source', 'auto-join')
-          .single()
+          .maybeSingle()
 
-        if (existingMeeting) continue // Already joined
+        if (existingMeeting) continue
 
-        // Check if meeting starts within the join window
+        // Only join if the meeting starts within the join window
         const eventStart = new Date(event.start?.dateTime || event.start?.date)
         const minutesUntilStart = (eventStart.getTime() - now.getTime()) / 60000
-        
-        if (minutesUntilStart > joinMinutes) continue // Not time yet
 
-        // Start the bot!
+        if (minutesUntilStart > joinMinutes) continue
+
+        // Determine platform
+        let platform = 'unknown'
+        if (meetingUrl.includes('teams.microsoft.com')) platform = 'teams'
+        else if (meetingUrl.includes('zoom.us')) platform = 'zoom'
+        else if (meetingUrl.includes('meet.google.com')) platform = 'google_meet'
+
+        // Send the bot
         const botResponse = await fetch(`${RECALL_BASE_URL}/bot/`, {
           method: 'POST',
           headers: {
@@ -134,13 +138,13 @@ serve(async (req) => {
         const botData = await botResponse.json()
 
         if (botResponse.ok && botData.id) {
-          // Record the meeting in DB
           await supabase.from('meetings').insert({
             user_id: pref.user_id,
             title: event.summary || 'Untitled Meeting',
             source: 'auto-join',
             calendar_event_id: event.id,
             meeting_link: meetingUrl,
+            platform,
             status: 'recording',
             start_time: eventStart.toISOString(),
             recall_bot_id: botData.id,

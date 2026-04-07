@@ -40,7 +40,6 @@ export function RecordingButton({
   const [showDialog, setShowDialog] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState(prefillTitle || '');
   const [isStarting, setIsStarting] = useState(false);
-  const [recordingMode, setRecordingMode] = useState<'browser' | 'bot'>('browser');
   const [meetingUrl, setMeetingUrl] = useState(propMeetingLink || '');
   const [notetakerName, setNotetakerName] = useState('EchoBrief Notetaker');
   const { user } = useAuth();
@@ -84,44 +83,19 @@ export function RecordingButton({
     try {
       const title = meetingTitle || `Meeting ${new Date().toLocaleDateString()}`;
 
-      if (recordingMode === 'bot') {
-        if (!meetingUrl) {
-          throw new Error('Please enter a meeting URL');
-        }
-        
-        const { data, error: botError } = await supabase.functions.invoke('start-recall-recording', {
-          body: { meeting_url: meetingUrl, user_id: user.id, title: title }
-        });
-
-        if (botError) throw botError;
-        if (data?.error) throw new Error(data.error);
-
-        toast({ title: 'Bot started', description: `Bot is joining the meeting` });
-        setShowDialog(false);
-      } else {
-        const meetingData = {
-          user_id: user.id,
-          title,
-          source: calendarEventId ? 'calendar' : 'manual',
-          calendar_event_id: calendarEventId || null,
-          meeting_link: meetingUrl || null,
-          attendees: (attendees || []) as unknown as Json,
-          status: 'recording',
-          start_time: new Date().toISOString(),
-        };
-        
-        const { data: meeting, error: meetingError } = await supabase
-          .from('meetings')
-          .insert(meetingData)
-          .select()
-          .single();
-
-        if (meetingError) throw meetingError;
-
-        await startRecording(meeting.id, title);
-        setShowDialog(false);
-        setMeetingTitle('');
+      if (!meetingUrl) {
+        throw new Error('Please enter a meeting URL');
       }
+
+      const { data, error: botError } = await supabase.functions.invoke('start-recall-recording', {
+        body: { meeting_url: meetingUrl, user_id: user.id, title: title }
+      });
+
+      if (botError) throw botError;
+      if (data?.error) throw new Error(data.error);
+
+      toast({ title: 'Bot started', description: `Bot is joining the meeting` });
+      setShowDialog(false);
     } catch (err: any) {
       toast({
         title: 'Error',
@@ -158,23 +132,6 @@ export function RecordingButton({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="flex gap-2">
-              <Button 
-                variant={recordingMode === 'browser' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setRecordingMode('browser')}
-              >
-                Extension
-              </Button>
-              <Button 
-                variant={recordingMode === 'bot' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setRecordingMode('bot')}
-              >
-                Bot (No Screen Share)
-              </Button>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="meeting-title">Meeting Title</Label>
               <Input
@@ -185,23 +142,15 @@ export function RecordingButton({
               />
             </div>
 
-            {recordingMode === 'bot' && (
-              <div className="space-y-2">
-                <Label htmlFor="meeting-url">Meeting URL</Label>
-                <Input
-                  id="meeting-url"
-                  placeholder="https://meet.google.com/..."
-                  value={meetingUrl}
-                  onChange={(e) => setMeetingUrl(e.target.value)}
-                />
-              </div>
-            )}
-
-            {recordingMode === 'browser' && permissionStatus === 'denied' && (
-              <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                Microphone access is required. Please enable it in your browser settings.
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="meeting-url">Meeting URL</Label>
+              <Input
+                id="meeting-url"
+                placeholder="https://meet.google.com/..."
+                value={meetingUrl}
+                onChange={(e) => setMeetingUrl(e.target.value)}
+              />
+            </div>
 
             {error && (
               <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">

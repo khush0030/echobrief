@@ -2,12 +2,12 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { RecordingButton } from '@/components/dashboard/RecordingButton';
-import { ExtensionStatus } from '@/components/dashboard/ExtensionStatus';
+
 import { DigestSettings } from '@/components/dashboard/DigestSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Meeting } from '@/types/meeting';
-import { Clock, ChevronRight, Mic, Users, CheckCircle2, Globe, Bot, FileText, Chrome, Zap, Sparkles } from 'lucide-react';
+import { Clock, ChevronRight, Mic, Users, CheckCircle2, Globe, Bot, FileText, Zap, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { T } from '@/lib/theme';
@@ -61,15 +61,13 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── SourceBadge (prototype exact) ───
 function SourceBadge({ source }: { source: string }) {
-  const isBot = source === 'bot' || source === 'recall_bot';
-  const label = isBot ? 'Bot' : 'Extension';
   return (
     <Badge
-      color={isBot ? T.purple : T.orangeL}
-      bg={isBot ? 'rgba(168,85,247,0.12)' : 'rgba(249,115,22,0.1)'}
+      color={T.purple}
+      bg="rgba(168,85,247,0.12)"
     >
-      {isBot ? <Bot size={11} /> : <Chrome size={11} />}
-      {label}
+      <Bot size={11} />
+      Bot
     </Badge>
   );
 }
@@ -354,8 +352,6 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Extension status */}
-        <ExtensionStatus className="mb-6" />
 
         {fetchError && !loading && (
           <div
