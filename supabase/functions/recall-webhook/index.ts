@@ -168,17 +168,14 @@ serve(async (req) => {
     );
 
     // Determine if we should trigger the audio-download → Sarvam pipeline.
-    // Recall sends events with the category prefix from the event name field, e.g.:
-    //   "status.done", "status.call_ended" (bot lifecycle)
-    //   "audio_mixed.done" (async audio ready — preferred signal)
-    //   "bot.done" (legacy / some account configs)
-    // We skip processing if Sarvam was already kicked off for this meeting.
+    // We ONLY trigger on "audio_mixed.done" — the authoritative signal that the
+    // mixed MP3 is ready for download.  "bot.done" / "status.done" fire at the
+    // same time and would cause a race condition (two parallel processRecallAudio
+    // calls before either writes sarvam_job_id back to the DB).
+    // The check-recall-status polling fallback handles the rare case where
+    // audio_mixed.done is never received.
     const isAudioReady = eventCategory === "audio_mixed" && statusCode === "done";
-    const isBotDone =
-      (eventCategory === "bot" || eventCategory === "status") &&
-      statusCode === "done";
-    const shouldProcessAudio =
-      (isAudioReady || isBotDone) && !meeting.sarvam_job_id;
+    const shouldProcessAudio = isAudioReady && !meeting.sarvam_job_id;
 
     if (!shouldProcessAudio) {
       // Handle intermediate bot status updates and terminal failures
