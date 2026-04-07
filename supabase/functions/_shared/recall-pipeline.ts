@@ -36,16 +36,12 @@ export async function getAudioDownloadUrl(botData: Record<string, any>) {
     ? botData.recordings
     : [];
 
-  // Best path: audio_mixed download_url is directly on the recording object
-  // under media_shortcuts (always present when audio_mixed recording is configured).
-  for (const recording of recordings) {
-    const url = recording.media_shortcuts?.audio_mixed?.data?.download_url;
-    if (url) return url;
-  }
-
-  // Secondary path: call the /audio_mixed/ API with the recording ID.
+  // Per Recall docs, audio_mixed is NOT included in media_shortcuts.
+  // It must be retrieved via the dedicated /audio_mixed/ API endpoint.
+  // See: https://docs.recall.ai/docs/how-to-get-mixed-audio-async
   const recordingWithId = recordings.find((r: any) => r?.id);
   if (recordingWithId?.id) {
+    console.log("[recall-pipeline] Fetching audio_mixed for recording:", recordingWithId.id);
     const response = await fetch(
       `${RECALL_API_URL}/audio_mixed/?recording_id=${recordingWithId.id}`,
       {
@@ -58,15 +54,17 @@ export async function getAudioDownloadUrl(botData: Record<string, any>) {
 
     if (response.ok) {
       const data = await response.json();
-      const url =
-        data.results?.[0]?.data?.download_url ||
-        data.results?.[0]?.url ||
-        null;
+      const audioResult = data.results?.[0];
+      console.log("[recall-pipeline] audio_mixed status:", audioResult?.status?.code, "has download_url:", !!audioResult?.data?.download_url);
+      const url = audioResult?.data?.download_url || null;
       if (url) return url;
+    } else {
+      console.warn("[recall-pipeline] audio_mixed endpoint returned:", response.status);
     }
   }
 
-  // Last resort: video_url (will be an mp4, but better than nothing)
+  // Last resort: video_url (mp4 — will likely fail transcription but logs the issue)
+  console.warn("[recall-pipeline] Falling back to video_url — audio_mixed not available");
   return botData.video_url || null;
 }
 
