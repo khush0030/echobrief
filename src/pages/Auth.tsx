@@ -144,7 +144,16 @@ export default function Auth() {
 
       {/* Right Panel - Auth Form */}
       <div className="relative flex flex-1 items-center justify-center p-8">
-        <div className="absolute right-6 top-6">
+        <div className="absolute left-6 top-6 z-10">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-lg px-1 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+            Back to home
+          </Link>
+        </div>
+        <div className="absolute right-6 top-6 z-10">
           <ThemeToggle />
         </div>
         <div className="w-full max-w-md">
