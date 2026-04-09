@@ -19,7 +19,7 @@ npm run functions:serve  # Serve Supabase Edge Functions locally (needs supabase
 ## Architecture
 
 ### Recording Flow
-**Dashboard (bot-only):** User enters a meeting URL → `start-recall-recording` creates a Recall bot → bot joins and records → `recall-webhook` receives completion → audio downloaded and submitted to Sarvam AI (async, webhook callback) or falls back to Whisper → GPT-4o-mini generates insights → saves to DB → optionally delivers to Slack/email.
+**Dashboard (bot-only):** User enters a meeting URL → `start-recall-recording` creates a Recall bot → bot joins and records → `recall-webhook` receives completion → audio downloaded and submitted to Sarvam AI (async, webhook callback) or falls back to Whisper → `sarvam-webhook` maps Sarvam's acoustic speaker IDs (SPEAKER_00, SPEAKER_01) to real participant names using Recall's speaker timeline (time-overlap matching) → GPT-4o-mini generates insights → saves to DB → optionally delivers to Slack/email.
 
 **Chrome Extension (backend still active, UI removed from dashboard):** Extension detects Meet/Zoom → `chrome.tabCapture` → offscreen document runs `MediaRecorder` → uploads WebM to `upload-recording` Edge Function → same processing pipeline as above.
 
@@ -43,7 +43,7 @@ npm run functions:serve  # Serve Supabase Edge Functions locally (needs supabase
 - `supabase/functions/upload-recording/` -- Accepts audio upload, stores in Supabase Storage
 - `supabase/functions/_shared/insights.ts` -- Hallucination detection, GPT prompt, insight saving, delivery
 - `supabase/functions/_shared/sarvam.ts` -- Sarvam API client (create job, upload, start)
-- `supabase/functions/_shared/recall-pipeline.ts` -- Shared Recall audio download + Sarvam submission logic (used by recall-webhook and check-recall-status)
+- `supabase/functions/_shared/recall-pipeline.ts` -- Shared Recall audio download + Sarvam submission logic (used by recall-webhook and check-recall-status). Also fetches Recall's transcript to extract real participant names and build a speaker timeline (speaker name + time range) stored in `processing_config` for later mapping in sarvam-webhook.
 - `supabase/functions/_shared/cors.ts` -- CORS headers shared across functions
 
 ### Database

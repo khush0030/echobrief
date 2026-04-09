@@ -80,7 +80,7 @@ Most meeting tools stop at transcription. EchoBrief goes deeper in both product 
 | Area | Capabilities |
 |---|---|
 | **Recording** | Recall-based meeting bot recording (primary, dashboard UI), Chrome extension recording for Meet and Zoom (backend only, UI removed from dashboard), manual recording controls, active recording UI |
-| **Transcription** | Sarvam batch STT with webhook completion, OpenAI Whisper fallback, speaker segmentation, timestamp handling, hallucination filtering |
+| **Transcription** | Sarvam batch STT with webhook completion, OpenAI Whisper fallback, speaker diarization with real name resolution (Recall speaker timeline → Sarvam acoustic ID mapping), timestamp handling, hallucination filtering |
 | **AI Insights** | Executive summary, short summary, action items, decisions, risks, questions, timeline, engagement-style meeting metrics |
 | **Calendar** | Google OAuth, multi-calendar support, calendar event syncing, meeting-link extraction, upcoming meeting views |
 | **Delivery** | Slack summary delivery, meeting email delivery, scheduled email workflows, digest report generation, WhatsApp report pipeline |
@@ -151,9 +151,10 @@ Most meeting tools stop at transcription. EchoBrief goes deeper in both product 
 1. User syncs calendars and selects a meeting with a supported meeting link.
 2. `start-recall-recording` creates a Recall recording bot and stores the mapping in `meetings`.
 3. Recall sends lifecycle events to `recall-webhook`.
-4. Once the bot finishes recording, EchoBrief downloads the audio from Recall.
-5. Audio is archived to Supabase Storage, then submitted to Sarvam for transcription.
-6. `sarvam-webhook` finishes transcript persistence, insight generation, and downstream delivery.
+4. Once the bot finishes recording, EchoBrief downloads the audio from Recall and fetches Recall's transcript (which contains real participant names from the meeting platform).
+5. Audio is archived to Supabase Storage, then submitted to Sarvam for transcription. A speaker timeline (participant name + time ranges) is built from the Recall transcript and stored in `processing_config`.
+6. `sarvam-webhook` maps Sarvam's acoustic speaker IDs (SPEAKER_00, SPEAKER_01) to real participant names using time-overlap matching against the Recall speaker timeline.
+7. Transcript with real speaker names is persisted, insights are generated, and downstream delivery (Slack/email) is triggered.
 
 ### 3. Insight Generation Flow
 
@@ -250,7 +251,7 @@ echobrief/
 │   │   ├── sync-*                  # Calendar and Notion sync entrypoints
 │   │   ├── send-*                  # Slack, email, WhatsApp, scheduled delivery
 │   │   ├── generate-*              # Digest and meeting insight generation
-│   │   └── _shared/                # CORS, rate limit, Sarvam helpers, insight helpers
+│   │   └── _shared/                # CORS, rate limit, Sarvam helpers, insight helpers, Recall pipeline (speaker timeline + audio download)
 │   ├── migrations/                 # Schema evolution and feature rollout history
 │   └── config.toml
 ├── docs/                           # Build plans and migration notes
@@ -515,6 +516,21 @@ This section is intentionally detailed because the hardest part of this project 
 - the meeting completes gracefully with a "no clear speech detected" message instead of staying stuck forever
 
 **Why this matters:** this is the kind of edge case that only surfaces in production with real data. Sarvam was behaving correctly — it just had nothing to output. The bug was entirely in the error handling layer, and it created a silent infinite loop with no obvious signal that anything was wrong. Catching it required reading logs across three separate functions and tracing the retry path manually.
+
+### 13. Speaker diarization returned generic labels instead of real participant names
+
+**Problem:** meeting transcripts showed "SPEAKER_00" and "SPEAKER_01" instead of actual participant names like "Amaan" or "Priya", making transcripts hard to follow.
+
+**Why it happened:** the pipeline was designed so Recall only provided audio to Sarvam, and Sarvam's diarization only returns acoustic speaker IDs (0, 1, 2). There was no mechanism to map those IDs back to real names, even though Recall had access to participant information from the meeting platform.
+
+**What I changed:**
+
+- added a `getRecallTranscript()` call in `recall-pipeline.ts` that fetches Recall's transcript endpoint (`/api/v1/bot/{id}/transcript/`), which includes real participant names and word-level timestamps from Google Meet, Zoom, or Teams
+- built a speaker timeline (name + time range pairs) from the Recall transcript and stored it in `processing_config` alongside the Sarvam job
+- in `sarvam-webhook`, added a time-overlap matching algorithm: for each Sarvam segment, find the Recall utterance with the most temporal overlap to determine which real person was speaking
+- the mapping is deterministic (no GPT guessing) and falls back gracefully to acoustic labels if Recall transcript is unavailable (e.g., chrome extension recordings)
+
+**Why this matters:** this is a cross-system data correlation problem. Two independent transcription sources (Recall for names, Sarvam for speech) had to be aligned using timestamp overlap as the join key. The solution adds no extra latency to the pipeline (Recall transcript is fetched in parallel with bot data) and requires no changes to the frontend since it already renders `seg.speaker` directly.
 
 ---
 

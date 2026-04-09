@@ -191,9 +191,10 @@
 ### 3. Bot Finishes Recording
 1. Recall bot leaves meeting → `bot.done` and `audio_mixed.done` webhooks fire
 2. `recall-webhook` receives event, downloads audio via `/api/v1/audio_mixed/` API
-3. Audio uploaded to Supabase Storage, Sarvam job created + started
-4. `sarvam-webhook` receives transcript → GPT generates insights → saves to DB
-5. Email/Slack delivery triggered, meeting marked as completed
+3. Recall's transcript is also fetched (`/api/v1/bot/{id}/transcript/`) to extract real participant names and build a speaker timeline (name + time ranges)
+4. Audio uploaded to Supabase Storage, Sarvam job created + started, speaker timeline stored in `processing_config`
+5. `sarvam-webhook` receives transcript → maps acoustic speaker IDs (SPEAKER_00, SPEAKER_01) to real names via time-overlap matching against the Recall speaker timeline → GPT generates insights → saves to DB
+6. Email/Slack delivery triggered, meeting marked as completed
 
 ---
 
