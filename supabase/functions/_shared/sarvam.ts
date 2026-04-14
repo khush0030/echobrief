@@ -43,7 +43,7 @@ export async function createSarvamJob(
         mode: "transcribe",
         with_diarization: true,
         with_timestamps: true,
-        language_code: "unknown",
+        language_code: "en-IN",
       },
       callback: {
         url: callbackUrl,
