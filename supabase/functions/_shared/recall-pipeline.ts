@@ -51,8 +51,9 @@ export async function getRecallTranscript(
     );
 
     if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
       console.warn(
-        `[recall-pipeline] Failed to fetch Recall transcript: ${response.status}`,
+        `[recall-pipeline] Failed to fetch Recall transcript: ${response.status} ${errBody.substring(0, 200)}`,
       );
       return null;
     }
@@ -172,6 +173,39 @@ export async function processRecallAudio(
     console.log(
       `[recall-pipeline] Recall participants: ${recallParticipants.map((p) => p.name).join(", ")}`,
     );
+  }
+
+  // Fallback: fetch participants from Recall's meeting_participants endpoint
+  if (recallParticipants.length === 0) {
+    try {
+      const partRes = await fetch(
+        `${RECALL_API_URL}/bot/${botId}/meeting_participants/`,
+        {
+          headers: {
+            Authorization: RECALL_API_KEY,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (partRes.ok) {
+        const partData = await partRes.json();
+        const participants = Array.isArray(partData) ? partData : partData?.results || [];
+        for (const p of participants) {
+          if (p.name) {
+            recallParticipants.push({ id: p.id, name: p.name });
+          }
+        }
+        if (recallParticipants.length > 0) {
+          console.log(
+            `[recall-pipeline] Participants from meeting_participants endpoint: ${recallParticipants.map((p) => p.name).join(", ")}`,
+          );
+        }
+      } else {
+        console.warn(`[recall-pipeline] meeting_participants endpoint returned: ${partRes.status}`);
+      }
+    } catch (err) {
+      console.warn("[recall-pipeline] Error fetching meeting_participants:", err);
+    }
   }
 
   // Also check meeting_participants from bot data

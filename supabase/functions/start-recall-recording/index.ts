@@ -39,6 +39,9 @@ serve(async (req) => {
         recording_config: {
           audio_mixed_mp3: {},
         },
+        transcription_options: {
+          provider: "default",
+        },
       }),
     });
 
