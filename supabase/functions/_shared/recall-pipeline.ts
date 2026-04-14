@@ -34,27 +34,70 @@ export async function getRecallBot(botId: string) {
 /**
  * Fetches the Recall bot's transcript which includes real speaker names
  * from the meeting platform (Google Meet, Zoom, Teams).
- * Returns an array of utterances with participant info and timestamped words.
+ *
+ * Uses the v1 transcript API: first queries by recording_id to find the
+ * transcript artifact, then downloads it via the download_url.
+ * The old /bot/{id}/transcript/ endpoint is deprecated.
  */
 export async function getRecallTranscript(
   botId: string,
+  botData?: Record<string, any>,
 ): Promise<RecallTranscriptEntry[] | null> {
   try {
-    const response = await fetch(
-      `${RECALL_API_URL}/bot/${botId}/transcript/`,
-      {
-        headers: {
-          Authorization: RECALL_API_KEY,
-          Accept: "application/json",
-        },
-      },
-    );
+    // 1. Try to get transcript download URL from bot's media_shortcuts
+    const recordings = Array.isArray(botData?.recordings) ? botData.recordings : [];
+    let downloadUrl: string | null = null;
 
+    for (const rec of recordings) {
+      const transcriptUrl = rec?.media_shortcuts?.transcript?.data?.download_url;
+      if (transcriptUrl) {
+        downloadUrl = transcriptUrl;
+        break;
+      }
+    }
+
+    // 2. If no media_shortcuts, query the transcript endpoint by recording_id
+    if (!downloadUrl) {
+      for (const rec of recordings) {
+        if (!rec?.id) continue;
+        try {
+          const res = await fetch(
+            `${RECALL_API_URL}/transcript/?recording_id=${rec.id}&status_code=done`,
+            {
+              headers: {
+                Authorization: RECALL_API_KEY,
+                Accept: "application/json",
+              },
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const results = data?.results || (Array.isArray(data) ? data : []);
+            if (results.length > 0 && results[0]?.data?.download_url) {
+              downloadUrl = results[0].data.download_url;
+              console.log(`[recall-pipeline] Found transcript via recording_id ${rec.id}`);
+              break;
+            }
+          } else {
+            const errBody = await res.text().catch(() => "");
+            console.warn(`[recall-pipeline] Transcript query for recording ${rec.id}: ${res.status} ${errBody.substring(0, 200)}`);
+          }
+        } catch (err) {
+          console.warn(`[recall-pipeline] Error querying transcript for recording ${rec.id}:`, err);
+        }
+      }
+    }
+
+    if (!downloadUrl) {
+      console.warn("[recall-pipeline] No transcript download URL found");
+      return null;
+    }
+
+    // 3. Download the transcript
+    console.log("[recall-pipeline] Downloading transcript from:", downloadUrl.substring(0, 80));
+    const response = await fetch(downloadUrl);
     if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      console.warn(
-        `[recall-pipeline] Failed to fetch Recall transcript: ${response.status} ${errBody.substring(0, 200)}`,
-      );
+      console.warn(`[recall-pipeline] Transcript download failed: ${response.status}`);
       return null;
     }
 
@@ -147,15 +190,13 @@ export async function processRecallAudio(
     .update({ status: "processing" })
     .eq("id", meeting.id);
 
-  // 1. Fetch bot details and Recall transcript (in parallel)
-  const [botData, recallTranscript] = await Promise.all([
-    getRecallBot(botId),
-    getRecallTranscript(botId),
-  ]);
+  // 1. Fetch bot details first, then transcript (needs bot data for recording IDs)
+  const botData = await getRecallBot(botId);
   console.log(
     "[recall-pipeline] Bot data keys:",
     Object.keys(botData).join(","),
   );
+  const recallTranscript = await getRecallTranscript(botId, botData);
 
   // Extract participant names from Recall transcript
   const recallParticipants: Array<{ id: number; name: string }> = [];
