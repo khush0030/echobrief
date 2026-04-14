@@ -129,18 +129,17 @@ serve(async (req) => {
         }),
       );
 
-      // Map acoustic speaker IDs to real names using Recall's speaker timeline.
-      // Recall's transcript has real participant names with timestamps; we match
-      // each Sarvam segment to the Recall utterance with the most time overlap.
+      // Map each Sarvam segment to a real speaker name using Recall's timeline.
+      // We match PER-SEGMENT (not per speaker_id) because Sarvam's diarization
+      // in translate mode often assigns all segments to one speaker_id, even when
+      // multiple people spoke. Recall knows exactly who spoke when.
       const recallTimeline: Array<{ speaker: string; start: number; end: number }> =
         config.recall_speaker_timeline || [];
-      const speakerIdToName: Record<string, string> = {};
+      const perSegmentSpeaker: (string | null)[] = rawSegments.map(() => null);
 
       if (recallTimeline.length > 0) {
-        // For each Sarvam segment, find the best-matching Recall utterance
-        for (const seg of rawSegments) {
-          if (speakerIdToName[seg.speaker_id || "0"]) continue; // already mapped
-
+        for (let i = 0; i < rawSegments.length; i++) {
+          const seg = rawSegments[i];
           let bestOverlap = 0;
           let bestName = "";
 
@@ -156,59 +155,20 @@ serve(async (req) => {
           }
 
           if (bestName && bestOverlap > 0) {
-            speakerIdToName[seg.speaker_id || "0"] = bestName;
+            perSegmentSpeaker[i] = bestName;
           }
         }
 
+        const namesFound = new Set(perSegmentSpeaker.filter(Boolean));
         console.log(
-          `Speaker ID mapping (overlap): ${JSON.stringify(speakerIdToName)}`,
+          `Speaker mapping (per-segment): ${namesFound.size} unique speakers found: ${[...namesFound].join(", ")}`,
         );
       }
 
-      // Fallback: if some speaker IDs remain unmapped but we have Recall
-      // participants, assign remaining names by elimination.
-      const recallParticipants: Array<{ id: number; name: string }> =
-        config.recall_participants || [];
-      if (recallParticipants.length > 0) {
-        const mappedNames = new Set(Object.values(speakerIdToName));
-        const unmappedParticipants = recallParticipants.filter(
-          (p) => !mappedNames.has(p.name),
-        );
-        const allSpeakerIds = new Set(
-          rawSegments.map((seg) => String(seg.speaker_id ?? "0")),
-        );
-        const unmappedIds = [...allSpeakerIds].filter(
-          (id) => !speakerIdToName[id],
-        );
-
-        // If there's exactly 1 unmapped ID and 1 unmapped participant, match them
-        if (unmappedIds.length === 1 && unmappedParticipants.length === 1) {
-          speakerIdToName[unmappedIds[0]] = unmappedParticipants[0].name;
-          console.log(
-            `Speaker ID fallback: ${unmappedIds[0]} → ${unmappedParticipants[0].name}`,
-          );
-        } else if (unmappedIds.length > 0 && unmappedParticipants.length > 0) {
-          // Multiple unmapped — assign in order (best effort)
-          for (let i = 0; i < Math.min(unmappedIds.length, unmappedParticipants.length); i++) {
-            speakerIdToName[unmappedIds[i]] = unmappedParticipants[i].name;
-          }
-          console.log(
-            `Speaker ID fallback (multi): ${JSON.stringify(speakerIdToName)}`,
-          );
-        }
-
-        if (Object.keys(speakerIdToName).length > 0) {
-          console.log(
-            `Speaker ID mapping (final): ${JSON.stringify(speakerIdToName)}`,
-          );
-        }
-      }
-
-      // Apply name mapping — fall back to acoustic label if no match
-      const speakerSegments: SpeakerSegment[] = rawSegments.map((seg) => ({
+      // Apply per-segment name mapping — fall back to acoustic label if no match
+      const speakerSegments: SpeakerSegment[] = rawSegments.map((seg, i) => ({
         ...seg,
-        speaker:
-          speakerIdToName[seg.speaker_id || "0"] || seg.speaker,
+        speaker: perSegmentSpeaker[i] || seg.speaker,
       }));
 
       const hallucinated = isLikelyHallucination(transcript);
