@@ -17,6 +17,10 @@ export default {
         sans: ['DM Sans', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
         heading: ['Outfit', 'Inter', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Brand kit fonts
+        'display': ['DM Serif Display', 'serif'],
+        'brand': ['Manrope', 'sans-serif'],
+        'brand-mono': ['IBM Plex Mono', 'monospace'],
       },
       fontSize: {
         'xs': ['0.75rem', { lineHeight: '1rem' }],
@@ -34,6 +38,29 @@ export default {
           amber: '#F59E0B',
           'orange-light': '#FB923C',
           'orange-dark': '#7C2D12',
+        },
+        // Warm Intelligence tokens
+        ember: {
+          DEFAULT: '#E8430A',
+          light: '#FF6B35',
+          dark: '#C23508',
+        },
+        gold: {
+          DEFAULT: '#F5C842',
+          light: '#FFE08A',
+        },
+        cream: {
+          DEFAULT: '#F0EBE0',
+          dark: '#D8D0C2',
+        },
+        ink: {
+          DEFAULT: '#1C1612',
+          mid: '#26201A',
+          light: '#342C24',
+        },
+        ash: {
+          DEFAULT: '#7A6F63',
+          light: '#A89D91',
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

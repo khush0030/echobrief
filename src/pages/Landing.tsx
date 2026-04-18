@@ -11,7 +11,14 @@ import { Footer } from '@/components/landing/Footer';
 
 export default function Landing() {
   return (
-    <div className="landing-shell landing-mesh landing-grain min-h-screen bg-background font-sans text-foreground antialiased selection:bg-orange-500/25 selection:text-foreground">
+    <div
+      className="landing-shell landing-mesh landing-grain min-h-screen antialiased"
+      style={{
+        background: 'var(--landing-bg)',
+        color: 'var(--landing-text)',
+        fontFamily: 'var(--font-body-brand)',
+      }}
+    >
       <Navbar />
       <main>
         <Hero />

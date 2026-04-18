@@ -33,8 +33,8 @@ function LogoMark({ size = 'md', animated = true }: { size?: LogoProps['size']; 
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#F97316" />
-          <stop offset="100%" stopColor="#F59E0B" />
+          <stop offset="0%" style={{ stopColor: 'var(--landing-ember)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--landing-gold)' }} />
         </linearGradient>
       </defs>
       <circle
@@ -72,11 +72,11 @@ export function Logo({
       <LogoMark size={size} animated={animated} />
       {showText && (
         <span
-          className={cn('font-semibold tracking-tight', sizes[size].text)}
-          style={{ fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.3px' }}
+          className={cn('leading-none', sizes[size].text)}
+          style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.04em' }}
         >
-          <span className="text-foreground">echo</span>
-          <span className="text-orange-600 dark:text-orange-400">brief</span>
+          <span style={{ color: 'var(--landing-text)' }}>echo</span>
+          <em style={{ color: 'var(--landing-ember)', fontStyle: 'italic' }}>brief</em>
         </span>
       )}
     </span>

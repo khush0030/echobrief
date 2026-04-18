@@ -13,12 +13,15 @@ const items = [
 
 export function IntegrationStrip() {
   return (
-    <section id="integrations" className="relative scroll-mt-24 border-y border-border/50 bg-muted/30 py-10 dark:bg-muted/15">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(249,115,22,0.03)_50%,transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(249,115,22,0.06)_50%,transparent)]" />
+    <section
+      id="integrations"
+      className="relative scroll-mt-24 py-12"
+      style={{ borderTop: '1px solid var(--landing-border-subtle)', borderBottom: '1px solid var(--landing-border-subtle)' }}
+    >
       <div className="relative mx-auto max-w-[1200px] px-6">
         <p
-          className="mb-6 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground"
-          style={{ fontFamily: "'DM Sans', sans-serif" }}
+          className="mb-8 text-center text-[10px] font-medium uppercase tracking-[0.2em]"
+          style={{ fontFamily: 'var(--font-mono-brand)', color: 'var(--landing-faint)' }}
         >
           Works with your stack
         </p>
@@ -31,15 +34,34 @@ export function IntegrationStrip() {
               viewport={{ once: true, margin: '-40px' }}
               transition={{ delay: i * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className="group flex min-w-[140px] flex-1 flex-col items-center rounded-2xl border border-border/80 bg-card/90 px-4 py-3 text-center shadow-sm backdrop-blur-sm transition-colors hover:border-orange-500/30 hover:shadow-md hover:shadow-orange-500/10 sm:min-w-[160px] md:flex-initial"
+              className="group flex min-w-[140px] flex-1 flex-col items-center rounded-2xl px-4 py-4 text-center transition-all duration-200 sm:min-w-[160px] md:flex-initial"
+              style={{
+                border: '1px solid var(--landing-border)',
+                background: 'var(--landing-bg-card)',
+                boxShadow: 'var(--landing-card-shadow)',
+              }}
             >
-              <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500/15 to-amber-500/10 text-orange-600 transition-transform group-hover:scale-110 dark:text-orange-400">
+              <div
+                className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
+                style={{
+                  background: 'color-mix(in srgb, var(--landing-ember) 10%, transparent)',
+                  color: 'var(--landing-ember)',
+                }}
+              >
                 <Icon className="h-5 w-5" strokeWidth={1.75} />
               </div>
-              <span className="text-[13px] font-semibold text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              <span
+                className="text-[13px] font-semibold"
+                style={{ fontFamily: 'var(--font-body-brand)', color: 'var(--landing-text)' }}
+              >
                 {label}
               </span>
-              <span className="mt-0.5 text-[10px] text-muted-foreground">{hint}</span>
+              <span
+                className="mt-0.5 text-[10px]"
+                style={{ fontFamily: 'var(--font-mono-brand)', color: 'var(--landing-faint)' }}
+              >
+                {hint}
+              </span>
             </motion.div>
           ))}
         </div>
