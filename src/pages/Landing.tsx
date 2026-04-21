@@ -5,6 +5,7 @@ import { LandingMarquee } from '@/components/landing/LandingMarquee';
 import { Features } from '@/components/landing/Features';
 import { HowItWorks } from '@/components/landing/HowItWorks';
 import { Languages } from '@/components/landing/Languages';
+import { Pricing } from '@/components/landing/Pricing';
 import { LandingFAQ } from '@/components/landing/LandingFAQ';
 import { CTA } from '@/components/landing/CTA';
 import { Footer } from '@/components/landing/Footer';
@@ -27,6 +28,7 @@ export default function Landing() {
         <Features />
         <HowItWorks />
         <Languages />
+        <Pricing />
         <LandingFAQ />
         <CTA />
       </main>
