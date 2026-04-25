@@ -94,15 +94,17 @@ serve(async (req) => {
           );
           console.log("Downloaded results from Sarvam API");
         } catch (downloadErr) {
+          // Any download failure (missing output file, Sarvam server bug like
+          // "KeyError: timestamps", 400/404, "no output file found", etc) means
+          // Sarvam can't give us a transcript. Rather than throwing 500 and
+          // getting retried forever by check-recall-status, set result to empty
+          // so the downstream `!finalTranscript` branch triggers the Whisper
+          // fallback automatically. The original error is logged for debugging.
           const errMsg = downloadErr instanceof Error ? downloadErr.message : String(downloadErr);
-          // Sarvam returns 400 "does not exist" when the audio had no speech to transcribe.
-          // Treat this as an empty transcript and complete the meeting gracefully.
-          if (errMsg.includes("does not exist") || errMsg.includes("400")) {
-            console.warn(`[sarvam-webhook] No output file for job ${job_id} — treating as silent/empty recording`);
-            result = { transcript: "", language_code: "unknown", diarized_transcript: { entries: [] } };
-          } else {
-            throw downloadErr;
-          }
+          console.warn(
+            `[sarvam-webhook] Sarvam download failed for job ${job_id} (${errMsg}) — will fall back to Whisper`,
+          );
+          result = { transcript: "", language_code: "unknown", diarized_transcript: { entries: [] } };
         }
       }
 

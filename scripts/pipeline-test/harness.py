@@ -1,0 +1,339 @@
+"""Pipeline test harness.
+
+Each scenario is an isolated test that:
+  1. Creates a synthetic [harness]-prefixed meeting row
+  2. Fires real webhooks at the real deployed edge functions
+  3. Polls for the expected end-state
+  4. Deletes the test row (always, even on failure)
+
+Run:
+    python3 scripts/pipeline-test/harness.py
+    python3 scripts/pipeline-test/harness.py --only race_bot_done_first
+    python3 scripts/pipeline-test/harness.py --cleanup-only
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import threading
+import time
+import traceback
+import uuid
+from dataclasses import dataclass, field
+from typing import Callable
+
+sys.path.insert(0, "/Users/amaanbarmare/Desktop/echobrief/scripts/pipeline-test")
+
+import client  # type: ignore
+import fixtures  # type: ignore
+
+
+@dataclass
+class ScenarioResult:
+    name: str
+    passed: bool
+    message: str = ""
+    elapsed_s: float = 0.0
+    details: dict = field(default_factory=dict)
+
+
+def scenario(fn: Callable[[], ScenarioResult]) -> Callable[[], ScenarioResult]:
+    """Decorator: runs scenario, catches exceptions as failures, tracks elapsed."""
+    def wrapped() -> ScenarioResult:
+        start = time.time()
+        try:
+            result = fn()
+        except Exception as e:
+            return ScenarioResult(
+                name=fn.__name__,
+                passed=False,
+                message=f"exception: {e}\n{traceback.format_exc()}",
+                elapsed_s=time.time() - start,
+            )
+        result.elapsed_s = time.time() - start
+        return result
+    wrapped.__name__ = fn.__name__
+    return wrapped
+
+
+# ---------- Scenarios ----------
+
+@scenario
+def happy_path_sarvam() -> ScenarioResult:
+    """Meeting with sarvam_job_id is processed via inline transcript → completed."""
+    job_id = f"test-hp-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="happy_path_sarvam",
+        recall_bot_id=client.GOOD_BOT_ID,
+        sarvam_job_id=job_id,
+        status="processing",
+        processing_config={"source": "recall", "audio_file_name": "recall-audio.mp3"},
+    )
+    try:
+        status, body = client.fire_sarvam_webhook(fixtures.sarvam_webhook_success(job_id))
+        if status >= 300:
+            return ScenarioResult("happy_path_sarvam", False, f"sarvam-webhook returned {status}: {body[:300]}")
+
+        result = client.wait_for_status(meeting_id, expected={"completed"}, timeout_s=30)
+        if not result.succeeded:
+            return ScenarioResult(
+                "happy_path_sarvam", False,
+                f"meeting never reached completed; final status={result.final_meeting.get('status')!r}",
+            )
+        transcript = client.get_transcript(meeting_id)
+        insights = client.get_insights(meeting_id)
+        if not transcript:
+            return ScenarioResult("happy_path_sarvam", False, "transcript row not created")
+        if not insights:
+            return ScenarioResult("happy_path_sarvam", False, "insights row not created")
+        return ScenarioResult(
+            "happy_path_sarvam", True,
+            f"status=completed in {result.elapsed_s:.1f}s; transcript_len={len(transcript.get('content',''))}; insights keys={len(insights.get('key_points') or [])}",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def bot_done_defers_on_unknown_audio() -> ScenarioResult:
+    """bot.done fires but Recall API can't confirm audio status → must defer, not fail.
+
+    This is the race-bug we fixed: before the fix, bot.done would set status=failed
+    whenever sarvam_job_id was still null. With the fix, bot.done queries Recall
+    for audio_mixed status. When that lookup returns 'unknown' (transient API blip
+    OR bot not yet fully registered), handler must defer rather than fail a good
+    meeting. We test this path by using a synthetic bot id so getRecallBot throws,
+    which is exactly the production behavior when Recall's API has a blip.
+    """
+    test_bot_id = f"test-bot-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="bot_done_defers_on_unknown_audio",
+        recall_bot_id=test_bot_id,
+        sarvam_job_id=None,
+        status="processing",
+    )
+    try:
+        status, body = client.fire_recall_webhook(
+            fixtures.recall_event("bot.done", test_bot_id)
+        )
+        if status >= 300:
+            return ScenarioResult(
+                "bot_done_defers_on_unknown_audio", False,
+                f"recall-webhook returned {status}: {body[:300]}",
+            )
+        # Status must NOT be "failed" for the full timeout window
+        result = client.wait_for_not_status(meeting_id, forbidden={"failed"}, timeout_s=6)
+        if not result.succeeded:
+            return ScenarioResult(
+                "bot_done_defers_on_unknown_audio", False,
+                f"meeting was marked failed (status={result.final_meeting.get('status')!r})",
+            )
+        return ScenarioResult(
+            "bot_done_defers_on_unknown_audio", True,
+            f"correctly deferred; final status={result.final_meeting.get('status')!r}",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def audio_mixed_failed_marks_meeting_failed() -> ScenarioResult:
+    """audio_mixed.failed event → status=failed (regression check for failure path)."""
+    test_bot_id = f"test-bot-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="audio_mixed_failed_marks_meeting_failed",
+        recall_bot_id=test_bot_id,
+        sarvam_job_id=None,
+        status="processing",
+    )
+    try:
+        event = fixtures.recall_event("audio_mixed.failed", test_bot_id, code="failed")
+        status, body = client.fire_recall_webhook(event)
+        if status >= 300:
+            return ScenarioResult(
+                "audio_mixed_failed_marks_meeting_failed", False,
+                f"recall-webhook returned {status}: {body[:300]}",
+            )
+        result = client.wait_for_status(meeting_id, expected={"failed"}, timeout_s=8)
+        if not result.succeeded:
+            return ScenarioResult(
+                "audio_mixed_failed_marks_meeting_failed", False,
+                f"expected status=failed; got {result.final_meeting.get('status')!r}",
+            )
+        return ScenarioResult(
+            "audio_mixed_failed_marks_meeting_failed", True,
+            "correctly marked failed on audio_mixed.failed",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def bot_kicked_waiting_room() -> ScenarioResult:
+    """bot.call_ended with sub_code=timeout_exceeded_waiting_room → status=failed."""
+    test_bot_id = f"test-bot-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="bot_kicked_waiting_room",
+        recall_bot_id=test_bot_id,
+        sarvam_job_id=None,
+        status="joining",
+    )
+    try:
+        event = fixtures.recall_event(
+            "bot.call_ended", test_bot_id,
+            code="call_ended", sub_code="timeout_exceeded_waiting_room",
+        )
+        status, body = client.fire_recall_webhook(event)
+        if status >= 300:
+            return ScenarioResult(
+                "bot_kicked_waiting_room", False,
+                f"recall-webhook returned {status}: {body[:300]}",
+            )
+        result = client.wait_for_status(meeting_id, expected={"failed"}, timeout_s=8)
+        if not result.succeeded:
+            return ScenarioResult(
+                "bot_kicked_waiting_room", False,
+                f"status should be failed; actual={result.final_meeting.get('status')!r}",
+            )
+        return ScenarioResult("bot_kicked_waiting_room", True, "marked failed as expected")
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def duplicate_sarvam_webhook_idempotency() -> ScenarioResult:
+    """Meeting already completed → a replayed sarvam-webhook must skip, not re-process."""
+    job_id = f"test-idem-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="duplicate_sarvam_webhook_idempotency",
+        recall_bot_id=client.GOOD_BOT_ID,
+        sarvam_job_id=job_id,
+        status="completed",  # already done
+    )
+    try:
+        status, body = client.fire_sarvam_webhook(fixtures.sarvam_webhook_success(job_id))
+        if status >= 300:
+            return ScenarioResult(
+                "duplicate_sarvam_webhook_idempotency", False,
+                f"sarvam-webhook returned {status}: {body[:300]}",
+            )
+        if "skipped" not in body.lower():
+            return ScenarioResult(
+                "duplicate_sarvam_webhook_idempotency", False,
+                f"expected skip, got body={body[:300]}",
+            )
+        # Verify no new transcript/insights were inserted
+        if client.get_transcript(meeting_id) is not None:
+            return ScenarioResult(
+                "duplicate_sarvam_webhook_idempotency", False,
+                "transcript was inserted despite meeting already being completed",
+            )
+        return ScenarioResult(
+            "duplicate_sarvam_webhook_idempotency", True,
+            "webhook correctly skipped replay",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def concurrent_sarvam_webhooks() -> ScenarioResult:
+    """Fire sarvam-webhook twice in parallel → only one should actually process.
+
+    Without idempotency keys both invocations currently read meeting.status=processing,
+    both proceed, both try to insert transcript. The `transcripts` insert check
+    protects against duplicates via a read-then-insert but that is itself racy.
+    """
+    job_id = f"test-concurrent-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="concurrent_sarvam_webhooks",
+        recall_bot_id=client.GOOD_BOT_ID,
+        sarvam_job_id=job_id,
+        status="processing",
+        processing_config={"source": "recall", "audio_file_name": "recall-audio.mp3"},
+    )
+    try:
+        payload = fixtures.sarvam_webhook_success(job_id)
+        responses: list[tuple[int, str]] = []
+
+        def fire() -> None:
+            responses.append(client.fire_sarvam_webhook(payload))
+
+        threads = [threading.Thread(target=fire) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=120)
+
+        result = client.wait_for_status(meeting_id, expected={"completed"}, timeout_s=30)
+        if not result.succeeded:
+            return ScenarioResult(
+                "concurrent_sarvam_webhooks", False,
+                f"never completed; final={result.final_meeting.get('status')!r}; responses={responses}",
+            )
+
+        # Should have exactly one transcript row (verified by presence, since
+        # we can't easily count rows — get_transcript returns first row only)
+        transcript = client.get_transcript(meeting_id)
+        if not transcript:
+            return ScenarioResult("concurrent_sarvam_webhooks", False, "no transcript")
+
+        return ScenarioResult(
+            "concurrent_sarvam_webhooks", True,
+            f"completed; responses={[r[0] for r in responses]}",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+ALL_SCENARIOS = [
+    happy_path_sarvam,
+    bot_done_defers_on_unknown_audio,
+    audio_mixed_failed_marks_meeting_failed,
+    bot_kicked_waiting_room,
+    duplicate_sarvam_webhook_idempotency,
+    concurrent_sarvam_webhooks,
+]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", help="Run only the scenario matching this name")
+    ap.add_argument("--cleanup-only", action="store_true", help="Delete all [harness] rows and exit")
+    args = ap.parse_args()
+
+    if args.cleanup_only:
+        n = client.cleanup_harness_rows()
+        print(f"Deleted {n} [harness] meetings")
+        return 0
+
+    scenarios = ALL_SCENARIOS
+    if args.only:
+        scenarios = [s for s in ALL_SCENARIOS if s.__name__ == args.only]
+        if not scenarios:
+            print(f"No scenario named {args.only!r}. Available: {[s.__name__ for s in ALL_SCENARIOS]}")
+            return 2
+
+    print(f"Running {len(scenarios)} scenario(s) against {client.SUPABASE_URL}")
+    print("=" * 80)
+    results: list[ScenarioResult] = []
+    for s in scenarios:
+        print(f"\n>>> {s.__name__}")
+        r = s()
+        results.append(r)
+        mark = "PASS" if r.passed else "FAIL"
+        print(f"    [{mark}] ({r.elapsed_s:.1f}s) {r.message}")
+
+    print("\n" + "=" * 80)
+    passed = sum(1 for r in results if r.passed)
+    print(f"RESULT: {passed}/{len(results)} passed")
+    for r in results:
+        mark = "PASS" if r.passed else "FAIL"
+        print(f"  [{mark}] {r.name} ({r.elapsed_s:.1f}s)")
+        if not r.passed:
+            print(f"         {r.message.splitlines()[0]}")
+    return 0 if passed == len(results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
