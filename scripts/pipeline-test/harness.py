@@ -286,6 +286,126 @@ def concurrent_sarvam_webhooks() -> ScenarioResult:
         client.delete_meeting(meeting_id)
 
 
+@scenario
+def monitor_recovers_known_pattern() -> ScenarioResult:
+    """Stuck meeting with a known signature → monitor classifies, attempts recovery, logs.
+
+    Creates a meeting in `processing` with no sarvam_job_id, age=20 min. Detection should
+    return signature `stuck:processing:no_sarvam_job` (known), recovery `check_recall_status`.
+    """
+    test_bot_id = f"test-bot-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="monitor_recovers_known_pattern",
+        recall_bot_id=test_bot_id,
+        sarvam_job_id=None,
+        status="processing",
+        age_minutes=20,
+    )
+    try:
+        status, body = client.call_monitor_stuck_meetings()
+        if status >= 300:
+            return ScenarioResult(
+                "monitor_recovers_known_pattern", False,
+                f"monitor returned {status}: {body[:300]}",
+            )
+
+        # Allow up to 10s for the audit row to land
+        events: list = []
+        for _ in range(10):
+            events = [e for e in client.get_monitor_events(meeting_id)]
+            if events:
+                break
+            time.sleep(1)
+
+        if not events:
+            return ScenarioResult(
+                "monitor_recovers_known_pattern", False,
+                f"no monitor_events row created. Monitor body: {body[:500]}",
+            )
+
+        e = events[0]
+        sig = e.get("error_signature")
+        if sig != "stuck:processing:no_sarvam_job":
+            return ScenarioResult(
+                "monitor_recovers_known_pattern", False,
+                f"wrong signature: got {sig!r}, expected stuck:processing:no_sarvam_job",
+            )
+        if e.get("is_new_pattern") is True:
+            return ScenarioResult(
+                "monitor_recovers_known_pattern", False,
+                f"signature was incorrectly flagged as new pattern",
+            )
+        if e.get("recovery_attempted") != "check_recall_status":
+            return ScenarioResult(
+                "monitor_recovers_known_pattern", False,
+                f"wrong recovery: {e.get('recovery_attempted')!r}",
+            )
+        return ScenarioResult(
+            "monitor_recovers_known_pattern", True,
+            f"signature={sig}, recovery={e.get('recovery_attempted')}, ok={e.get('recovery_succeeded')}",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
+@scenario
+def monitor_logs_unknown_pattern() -> ScenarioResult:
+    """Stuck meeting with a never-seen-before status → monitor flags is_new_pattern=true.
+
+    A meeting with status `weird_test_state_xyz` produces signature
+    `stuck:weird_test_state_xyz:unknown` which isn't in KNOWN_PATTERNS. Monitor should
+    log it with is_new_pattern=true and attempt to email. We assert the audit row,
+    not the actual email send (Resend domain config is a separate concern).
+    """
+    test_bot_id = f"test-bot-{uuid.uuid4()}"
+    meeting_id = client.insert_meeting(
+        title="monitor_logs_unknown_pattern",
+        recall_bot_id=test_bot_id,
+        sarvam_job_id=None,
+        status="weird_test_state_xyz",
+        age_minutes=20,
+    )
+    try:
+        status, body = client.call_monitor_stuck_meetings()
+        if status >= 300:
+            return ScenarioResult(
+                "monitor_logs_unknown_pattern", False,
+                f"monitor returned {status}: {body[:300]}",
+            )
+
+        events: list = []
+        for _ in range(10):
+            events = client.get_monitor_events(meeting_id)
+            if events:
+                break
+            time.sleep(1)
+
+        if not events:
+            return ScenarioResult(
+                "monitor_logs_unknown_pattern", False,
+                f"no monitor_events row created. Monitor body: {body[:500]}",
+            )
+
+        e = events[0]
+        sig = e.get("error_signature")
+        if sig != "stuck:weird_test_state_xyz:unknown":
+            return ScenarioResult(
+                "monitor_logs_unknown_pattern", False,
+                f"wrong signature: got {sig!r}",
+            )
+        if e.get("is_new_pattern") is not True:
+            return ScenarioResult(
+                "monitor_logs_unknown_pattern", False,
+                f"unknown signature should be is_new_pattern=true, got {e.get('is_new_pattern')!r}",
+            )
+        return ScenarioResult(
+            "monitor_logs_unknown_pattern", True,
+            f"flagged as new pattern: {sig}, email_sent={e.get('email_sent')}",
+        )
+    finally:
+        client.delete_meeting(meeting_id)
+
+
 ALL_SCENARIOS = [
     happy_path_sarvam,
     bot_done_defers_on_unknown_audio,
@@ -293,6 +413,8 @@ ALL_SCENARIOS = [
     bot_kicked_waiting_room,
     duplicate_sarvam_webhook_idempotency,
     concurrent_sarvam_webhooks,
+    monitor_recovers_known_pattern,
+    monitor_logs_unknown_pattern,
 ]
 
 

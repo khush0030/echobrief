@@ -43,6 +43,10 @@ Thumbs.db
 coverage
 *.lcov
 
+# Python (harness)
+__pycache__/
+*.pyc
+
 # Chrome extension build
 echobrief-extension.zip
 

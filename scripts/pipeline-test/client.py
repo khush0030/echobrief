@@ -82,19 +82,29 @@ def insert_meeting(
     status: str = "scheduled",
     processing_config: dict[str, Any] | None = None,
     audio_url: str | None = None,
+    age_minutes: int = 0,
 ) -> str:
+    """Insert a test meeting. age_minutes back-dates created_at AND updated_at,
+    so the row appears `age_minutes` old to the monitor. The meetings table has
+    a BEFORE UPDATE trigger on updated_at so we set it on INSERT only."""
     meeting_id = str(uuid.uuid4())
+    backdated_iso = time.strftime(
+        "%Y-%m-%dT%H:%M:%SZ",
+        time.gmtime(time.time() - age_minutes * 60),
+    )
     body = {
         "id": meeting_id,
         "user_id": TEST_USER_ID,
         "title": f"[harness] {title} {meeting_id[:8]}",
         "source": "recall",
-        "start_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "start_time": backdated_iso,
         "status": status,
         "recall_bot_id": recall_bot_id,
         "sarvam_job_id": sarvam_job_id,
         "processing_config": processing_config or {},
         "audio_url": audio_url,
+        "created_at": backdated_iso,
+        "updated_at": backdated_iso,
     }
     status_code, resp_body = _request(
         "POST",
@@ -105,6 +115,26 @@ def insert_meeting(
     if status_code >= 300:
         raise HTTPError(status_code, resp_body.decode(), "insert_meeting")
     return meeting_id
+
+
+def get_monitor_events(meeting_id: str) -> list[dict[str, Any]]:
+    status, body = _request(
+        "GET",
+        f"{SUPABASE_URL}/rest/v1/monitor_events?meeting_id=eq.{meeting_id}&select=*&order=created_at.desc",
+        headers=_rest_headers(),
+    )
+    return json.loads(body) if status < 300 else []
+
+
+def delete_monitor_events(meeting_id: str) -> None:
+    try:
+        _request(
+            "DELETE",
+            f"{SUPABASE_URL}/rest/v1/monitor_events?meeting_id=eq.{meeting_id}",
+            headers=_rest_headers(),
+        )
+    except Exception:
+        pass
 
 
 def get_meeting(meeting_id: str) -> dict[str, Any]:
@@ -193,6 +223,18 @@ def fire_sarvam_webhook(payload: dict[str, Any]) -> tuple[int, str]:
             "Authorization": f"Bearer {SARVAM_WEBHOOK_SECRET}",
         },
         body=json.dumps(payload).encode(),
+        timeout=120,
+    )
+    return status, body.decode()
+
+
+def call_monitor_stuck_meetings() -> tuple[int, str]:
+    url = f"{SUPABASE_URL}/functions/v1/monitor-stuck-meetings"
+    status, body = _request(
+        "POST",
+        url,
+        headers={"Content-Type": "application/json"},
+        body=b"{}",
         timeout=120,
     )
     return status, body.decode()

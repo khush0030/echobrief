@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.sync-calendars]
 verify_jwt = false
+
+[functions.monitor-stuck-meetings]
+verify_jwt = false
